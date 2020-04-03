@@ -1,0 +1,11 @@
+/STM32F103/EWARM/4WD Rover/Obj
+
+# ignore emacs backup files
+*~
+
+# ignore SolidWorks temporary files
+~$*.SLDPRT
+~$*.SLDASM
+
+# ignore OS X desktops
+.DS_Store
