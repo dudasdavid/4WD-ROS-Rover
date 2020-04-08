@@ -1072,6 +1072,9 @@
         <file>
           <name>$PROJ_DIR$\..\Core\Src\stm32f1xx_hal_msp.c</name>
         </file>
+        <file>
+          <name>$PROJ_DIR$/../Core/Src/stm32f1xx_hal_timebase_tim.c</name>
+        </file>
       </group>
       <group>
         <name>USB_DEVICE</name>

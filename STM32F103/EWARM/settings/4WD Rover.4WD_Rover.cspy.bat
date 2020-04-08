@@ -25,7 +25,7 @@ if not "%~1" == "" goto debugFile
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\common\bin\cspybat" -f "C:\GIT\4WD Rover\EWARM\settings\4WD Rover.4WD_Rover.general.xcl" --backend -f "C:\GIT\4WD Rover\EWARM\settings\4WD Rover.4WD_Rover.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\common\bin\cspybat" -f "C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\settings\4WD Rover.4WD_Rover.general.xcl" --backend -f "C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\settings\4WD Rover.4WD_Rover.driver.xcl" 
 
 @echo off 
 goto end 
@@ -34,7 +34,7 @@ goto end
 
 @echo on 
 
-"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\common\bin\cspybat" -f "C:\GIT\4WD Rover\EWARM\settings\4WD Rover.4WD_Rover.general.xcl" "--debug_file=%~1" --backend -f "C:\GIT\4WD Rover\EWARM\settings\4WD Rover.4WD_Rover.driver.xcl" 
+"C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\common\bin\cspybat" -f "C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\settings\4WD Rover.4WD_Rover.general.xcl" "--debug_file=%~1" --backend -f "C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\settings\4WD Rover.4WD_Rover.driver.xcl" 
 
 @echo off 
 :end

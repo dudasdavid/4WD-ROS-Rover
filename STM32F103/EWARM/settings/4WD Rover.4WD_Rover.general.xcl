@@ -2,7 +2,7 @@
 
 "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\arm\bin\armstlink2.dll" 
 
-"C:\GIT\4WD Rover\EWARM\4WD Rover\Exe\4WD Rover.out" 
+"C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\4WD Rover\Exe\4WD Rover.out" 
 
 --plugin="C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\arm\bin\armbat.dll" 
 

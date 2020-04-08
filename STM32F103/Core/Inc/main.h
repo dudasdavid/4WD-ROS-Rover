@@ -62,18 +62,18 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define PC13_LED_Pin GPIO_PIN_13
 #define PC13_LED_GPIO_Port GPIOC
-#define TIM2_CH1_FL_Pin GPIO_PIN_0
-#define TIM2_CH1_FL_GPIO_Port GPIOA
-#define TIM2_CH2_FR_Pin GPIO_PIN_1
-#define TIM2_CH2_FR_GPIO_Port GPIOA
+#define TIM2_CH1_RL_Pin GPIO_PIN_0
+#define TIM2_CH1_RL_GPIO_Port GPIOA
+#define TIM2_CH2_RR_Pin GPIO_PIN_1
+#define TIM2_CH2_RR_GPIO_Port GPIOA
 #define TIM3_CH1_STEERING_Pin GPIO_PIN_6
 #define TIM3_CH1_STEERING_GPIO_Port GPIOA
-#define IMU_LRDY_Pin GPIO_PIN_2
+#define IMU_LRDY_Pin GPIO_PIN_1
 #define IMU_LRDY_GPIO_Port GPIOB
-#define TIM2_CH3_RL_Pin GPIO_PIN_10
-#define TIM2_CH3_RL_GPIO_Port GPIOB
-#define TIM2_CH4_RR_Pin GPIO_PIN_11
-#define TIM2_CH4_RR_GPIO_Port GPIOB
+#define TIM2_CH3_FL_Pin GPIO_PIN_10
+#define TIM2_CH3_FL_GPIO_Port GPIOB
+#define TIM2_CH4_FR_Pin GPIO_PIN_11
+#define TIM2_CH4_FR_GPIO_Port GPIOB
 #define IMU_LIN2_Pin GPIO_PIN_12
 #define IMU_LIN2_GPIO_Port GPIOB
 #define IMU_LIN1_Pin GPIO_PIN_13

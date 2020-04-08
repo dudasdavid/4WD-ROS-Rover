@@ -23,9 +23,9 @@
 
 if ($debugfile -eq "")
 {
-& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\common\bin\cspybat" -f "C:\GIT\4WD Rover\EWARM\settings\4WD Rover.4WD_Rover.general.xcl" --backend -f "C:\GIT\4WD Rover\EWARM\settings\4WD Rover.4WD_Rover.driver.xcl" 
+& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\common\bin\cspybat" -f "C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\settings\4WD Rover.4WD_Rover.general.xcl" --backend -f "C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\settings\4WD Rover.4WD_Rover.driver.xcl" 
 }
 else
 {
-& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\common\bin\cspybat" -f "C:\GIT\4WD Rover\EWARM\settings\4WD Rover.4WD_Rover.general.xcl" --debug_file=$debugfile --backend -f "C:\GIT\4WD Rover\EWARM\settings\4WD Rover.4WD_Rover.driver.xcl" 
+& "C:\Program Files (x86)\IAR Systems\Embedded Workbench 8.2\common\bin\cspybat" -f "C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\settings\4WD Rover.4WD_Rover.general.xcl" --debug_file=$debugfile --backend -f "C:\GIT\4WD-ROS-Rover\STM32F103\EWARM\settings\4WD Rover.4WD_Rover.driver.xcl" 
 }
