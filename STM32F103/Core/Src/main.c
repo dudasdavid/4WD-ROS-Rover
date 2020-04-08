@@ -85,6 +85,14 @@ static volatile float RL_val = 50;
 static volatile float RR_val = 50;
 static volatile float ST_val = 50;
 
+static uint32_t motCntr = 0; //Motor encoder
+static uint32_t motCntrPrev = 0; //Motor encoder
+static uint32_t motSpeedRaw = 0; //Motor encoder
+static volatile float motSpeed = 0; //Motor encoder
+static float raw2mps = 1; //Motor encoder
+static uint32_t pwm1 = 0; //Motor encoder
+static uint32_t pwm2 = 0; //Motor encoder
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -154,19 +162,9 @@ int main(void)
   
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET); //SERVO ENA DISABLED
-  
   TIM1->CCR1 = 0*3600/100; //DC motor +
   TIM1->CCR2 = 0*3600/100; //DC motor -
   
-  
-  
-  TIM2->CCR1 = (int)((RL_val / (100 / (RL_max - RL_min)) + RL_min) * 36000) / 100; //Servo RL
-  TIM2->CCR2 = (int)(((100 - RR_val) / (100 / (RR_max - RR_min)) + RR_min) * 36000) / 100; //Servo RR
-  TIM2->CCR3 = (int)(((100 - FL_val) / (100 / (FL_max - FL_min)) + FL_min) * 36000) / 100; //Servo FL
-  TIM2->CCR4 = (int)((FR_val / (100 / (FR_max - FR_min)) + FR_min) * 36000) / 100; //Servo FR
-  
-  TIM3->CCR1 = (int)((ST_val / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -566,11 +564,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(ENA_SERVO_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_6;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  /*Configure GPIO pin : MOT_ENC_Pin */
+  GPIO_InitStruct.Pin = MOT_ENC_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(MOT_ENC_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
@@ -579,6 +577,17 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+  switch ( GPIO_Pin ) {
+  case GPIO_PIN_6:
+    motCntr++;
+    break; 
+  default:
+    break;
+  }
+}
+
 /**
   * @brief Count characters in char array
   * @param ptr: pointer to char array
@@ -660,7 +669,15 @@ void StartMotorControlTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    TIM1->CCR1 = pwm1*3600/100; //DC motor +
+    TIM1->CCR2 = pwm2*3600/100; //DC motor -
+    
+    motSpeedRaw = motCntr - motCntrPrev;
+    motSpeed = motSpeedRaw * raw2mps;
+    
+    motCntrPrev = motCntr;
+    
+    osDelay(10);
   }
   /* USER CODE END StartMotorControlTask */
 }
@@ -693,6 +710,14 @@ void StartCommTask(void const * argument)
 void StartServoTask(void const * argument)
 {
   /* USER CODE BEGIN StartServoTask */
+  TIM2->CCR1 = (int)((RL_val / (100 / (RL_max - RL_min)) + RL_min) * 36000) / 100; //Servo RL
+  TIM2->CCR2 = (int)(((100 - RR_val) / (100 / (RR_max - RR_min)) + RR_min) * 36000) / 100; //Servo RR
+  TIM2->CCR3 = (int)(((100 - FL_val) / (100 / (FL_max - FL_min)) + FL_min) * 36000) / 100; //Servo FL
+  TIM2->CCR4 = (int)((FR_val / (100 / (FR_max - FR_min)) + FR_min) * 36000) / 100; //Servo FR
+  
+  TIM3->CCR1 = (int)((ST_val / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
+  osDelay(100);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET); //SERVO ENABLED
   /* Infinite loop */
   for(;;)
   {
