@@ -25,7 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <math.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,6 +36,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define ABS(x)         (x < 0) ? (-x) : x
+#define PI     3.14159
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -61,7 +64,9 @@ static volatile uint32_t timeStamp =0;
 static volatile uint32_t timeOutGuard =0;
 static volatile uint32_t timeOutGuardMax = 0;
 static volatile float referenceSpeed = 0;
-static volatile float referenceAngle = 0;
+static float referenceSpeedRaw = 50;
+static float referenceAngle = 50;
+static float referenceDistance = 50;
 volatile uint8_t driveEna = 0;
 char txBuf[30];
 char rxBuf[64];
@@ -86,12 +91,30 @@ static volatile float RR_val = 50;
 static volatile float ST_val = 50;
 
 static uint32_t motCntr = 0; //Motor encoder
-static uint32_t motCntrPrev = 0; //Motor encoder
-static uint32_t motSpeedRaw = 0; //Motor encoder
-static volatile float motSpeed = 0; //Motor encoder
-static float raw2mps = 1; //Motor encoder
-static uint32_t pwm1 = 0; //Motor encoder
-static uint32_t pwm2 = 0; //Motor encoder
+static uint32_t motCntrPrev = 0;
+static uint32_t motSpeedRaw = 0;
+static volatile float motSpeed = 0;
+static float raw2mps = 4000.0;
+static volatile int16_t controlTaskCycle_ms = 10;
+
+static volatile int16_t pwm1 = 0;
+static volatile int16_t pwm2 = 0;
+
+static volatile float motSpeedFiltered = 0;
+static volatile float speedError = 0;
+static volatile float speedErrorPrev = 0;
+static volatile float speedIntError = 0;
+static volatile float speedDerivatedError = 0;
+static int16_t forceMotor = 0;
+static volatile int16_t forceMotorBeforeSaturation = 0;
+static volatile int16_t absForceMotor = 0;
+
+static volatile float antiWindup = 0;
+static volatile float ctrlP = 300;
+static volatile float ctrlI = 1.2;
+static volatile float ctrlD = 0;
+static volatile float feedForward = 62;
+static volatile int16_t forceSaturation = 80;
 
 /* USER CODE END PV */
 
@@ -604,6 +627,25 @@ uint16_t SizeofCharArray(char *ptr)
   }	
   return len;
 }
+
+float filter2 (float avg, float input, float alpha) {
+  avg = (alpha * input) + (1.0 - alpha) * avg;
+  return avg;
+}
+
+void saturateInteger(int16_t* i, int16_t min, int16_t max) {
+  int16_t val = *i;
+  if (val < min) val = min;
+  else if (val > max) val = max;
+  *i = val;
+}
+
+void saturateFloat(float* i, float min, float max) {
+  float val = *i;
+  if (val < min) val = min;
+  else if (val > max) val = max;
+  *i = val;
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -618,38 +660,12 @@ void StartDefaultTask(void const * argument)
   /* init code for USB_DEVICE */
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
-  uint16_t Len = 0;
+  
   /* Infinite loop */
   for(;;)
   {
-    if (receiveState == 1){
-      if ((rxBuf[0] == 'K') && (rxBuf[1] == 'A') && (rxBuf[2] == 'L') && (rxBuf[3] == '\r')){ // KAL = Keep alive (response echo)
-        sprintf(txBuf, "OK: %s\r\n", rxBuf);
-        Len = SizeofCharArray((char*)txBuf);
-        CDC_Transmit_FS((uint8_t*)txBuf, Len);
-      }
-      else{
-        sprintf(txBuf, "ERR: %s\r\n", rxBuf);
-        Len = SizeofCharArray((char*)txBuf);
-        CDC_Transmit_FS((uint8_t*)txBuf, Len);
-      }
-      timeStamp = HAL_GetTick();
-      receiveState = 0;
-    }
-      
-    timeOutGuard = HAL_GetTick() - timeStamp;
-    if (timeOutGuard > timeOutGuardMax){
-      timeOutGuardMax = timeOutGuard;
-    }
-    
-    if ((timeOutGuard) > 1000){
-      referenceSpeed = 0;
-      referenceAngle = 0;
-      driveEna = 0;
-    }
-      
-    osDelay(1000);
-    //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+  
+    osDelay(500);
     HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
     
   }
@@ -669,15 +685,50 @@ void StartMotorControlTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-    TIM1->CCR1 = pwm1*3600/100; //DC motor +
-    TIM1->CCR2 = pwm2*3600/100; //DC motor -
+    
+    referenceSpeed = (referenceSpeedRaw - 50)/100.0;
     
     motSpeedRaw = motCntr - motCntrPrev;
-    motSpeed = motSpeedRaw * raw2mps;
+    motSpeed = motSpeedRaw / raw2mps * 1000.0 / controlTaskCycle_ms;
     
     motCntrPrev = motCntr;
     
-    osDelay(10);
+    motSpeedFiltered = filter2(motSpeedFiltered, motSpeed, 0.35);
+    
+    speedErrorPrev = speedError;
+    speedError = fabs(referenceSpeed) - motSpeedFiltered;
+    speedIntError = speedIntError + speedError + antiWindup * (forceMotor - forceMotorBeforeSaturation);
+    speedDerivatedError = speedError - speedErrorPrev;
+    forceMotor = (int)(ctrlP * speedError + ctrlI * speedIntError + ctrlD * speedDerivatedError);
+    
+    if (fabs(referenceSpeed) < 0.01) {
+      speedIntError -= speedIntError*0.03;
+    }
+    else {
+      forceMotor += feedForward;
+    }
+    
+    forceMotorBeforeSaturation = forceMotor;
+    
+    saturateInteger(&forceMotor, 0, forceSaturation);
+    absForceMotor = ABS(forceMotor);
+    
+    if ((pwm1 != 0) || (pwm2 != 0)){
+      TIM1->CCR1 = pwm1*3600/100; //DC motor +
+      TIM1->CCR2 = pwm2*3600/100; //DC motor -
+    }
+    else {
+      if (referenceSpeed < 0){
+          TIM1->CCR1 = absForceMotor*3600/100; //DC motor +
+          TIM1->CCR2 = 0*3600/100; //DC motor -
+      }
+      else {
+          TIM1->CCR1 = 0*3600/100; //DC motor +
+          TIM1->CCR2 = absForceMotor*3600/100; //DC motor -
+      }
+    }
+    
+    osDelay(controlTaskCycle_ms);
   }
   /* USER CODE END StartMotorControlTask */
 }
@@ -692,10 +743,56 @@ void StartMotorControlTask(void const * argument)
 void StartCommTask(void const * argument)
 {
   /* USER CODE BEGIN StartCommTask */
+  uint16_t Len = 0;
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    if (receiveState == 1){
+      if ((rxBuf[0] == 'K') && (rxBuf[1] == 'A') && (rxBuf[2] == '\r')){ // KA = Keep alive (response echo)
+        __ASM("NOP");
+      }
+      else if ((rxBuf[0] == 'S') && (rxBuf[1] == 'T') && (rxBuf[2] == 'R') && (rxBuf[6] == '\r')){
+        referenceAngle = (int16_t)((rxBuf[3]  - '0')*100 + (rxBuf[4]  - '0')*10 + (rxBuf[5]  - '0')*1);
+        saturateFloat(&referenceAngle,0,100);
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'S') && (rxBuf[1] == 'P') && (rxBuf[2] == 'D') && (rxBuf[6] == '\r')){
+        referenceSpeedRaw = (int16_t)((rxBuf[3]  - '0')*100 + (rxBuf[4]  - '0')*10 + (rxBuf[5]  - '0')*1);
+        saturateFloat(&referenceSpeedRaw,0,100);
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'D') && (rxBuf[1] == 'I') && (rxBuf[2] == 'S') && (rxBuf[6] == '\r')){
+        referenceDistance = (int16_t)((rxBuf[3]  - '0')*100 + (rxBuf[4]  - '0')*10 + (rxBuf[5]  - '0')*1);
+        saturateFloat(&referenceDistance,0,100);
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      
+      else{
+        sprintf(txBuf, "ERR: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      timeStamp = HAL_GetTick();
+      receiveState = 0;
+    }
+      
+    timeOutGuard = HAL_GetTick() - timeStamp;
+    if (timeOutGuard > timeOutGuardMax){
+      timeOutGuardMax = timeOutGuard;
+    }
+    
+    if ((timeOutGuard) > 1000){
+      //referenceSpeedRaw = 50;
+      //referenceAngle = 50;
+      driveEna = 0;
+    }
+    osDelay(10);
   }
   /* USER CODE END StartCommTask */
 }
@@ -715,18 +812,22 @@ void StartServoTask(void const * argument)
   TIM2->CCR3 = (int)(((100 - FL_val) / (100 / (FL_max - FL_min)) + FL_min) * 36000) / 100; //Servo FL
   TIM2->CCR4 = (int)((FR_val / (100 / (FR_max - FR_min)) + FR_min) * 36000) / 100; //Servo FR
   
-  TIM3->CCR1 = (int)((ST_val / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
+  TIM3->CCR1 = (int)(((100 - ST_val) / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
   osDelay(100);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET); //SERVO ENABLED
   /* Infinite loop */
   for(;;)
   {
+    
+    ST_val = referenceAngle;
+    FL_val = FR_val = RL_val = RR_val = referenceDistance;
+    
     TIM2->CCR1 = (int)((RL_val / (100 / (RL_max - RL_min)) + RL_min) * 36000) / 100; //Servo RL
     TIM2->CCR2 = (int)(((100 - RR_val) / (100 / (RR_max - RR_min)) + RR_min) * 36000) / 100; //Servo RR
     TIM2->CCR3 = (int)(((100 - FL_val) / (100 / (FL_max - FL_min)) + FL_min) * 36000) / 100; //Servo FL
     TIM2->CCR4 = (int)((FR_val / (100 / (FR_max - FR_min)) + FR_min) * 36000) / 100; //Servo FR
     
-    TIM3->CCR1 = (int)((ST_val / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
+    TIM3->CCR1 = (int)(((100 - ST_val) / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
     osDelay(10);
   }
   /* USER CODE END StartServoTask */
