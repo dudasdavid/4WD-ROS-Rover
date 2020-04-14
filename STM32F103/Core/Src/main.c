@@ -130,7 +130,7 @@ void StartDefaultTask(void const * argument);
 void StartMotorControlTask(void const * argument);
 void StartCommTask(void const * argument);
 void StartServoTask(void const * argument);
-void StartTask05(void const * argument);
+void StartSensorTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 extern uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
@@ -224,7 +224,7 @@ int main(void)
   servoTaskHandle = osThreadCreate(osThread(servoTask), NULL);
 
   /* definition and creation of sensorTask */
-  osThreadDef(sensorTask, StartTask05, osPriorityNormal, 0, 128);
+  osThreadDef(sensorTask, StartSensorTask, osPriorityNormal, 0, 128);
   sensorTaskHandle = osThreadCreate(osThread(sensorTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
@@ -833,22 +833,22 @@ void StartServoTask(void const * argument)
   /* USER CODE END StartServoTask */
 }
 
-/* USER CODE BEGIN Header_StartTask05 */
+/* USER CODE BEGIN Header_StartSensorTask */
 /**
 * @brief Function implementing the sensorTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask05 */
-void StartTask05(void const * argument)
+/* USER CODE END Header_StartSensorTask */
+void StartSensorTask(void const * argument)
 {
-  /* USER CODE BEGIN StartTask05 */
+  /* USER CODE BEGIN StartSensorTask */
   /* Infinite loop */
   for(;;)
   {
     osDelay(1);
   }
-  /* USER CODE END StartTask05 */
+  /* USER CODE END StartSensorTask */
 }
 
  /**
