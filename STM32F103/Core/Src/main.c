@@ -63,11 +63,12 @@ osThreadId sensorTaskHandle;
 static volatile uint32_t timeStamp =0;
 static volatile uint32_t timeOutGuard =0;
 static volatile uint32_t timeOutGuardMax = 0;
+static volatile uint8_t timeOutGuardEna = 1;
 static volatile float referenceSpeed = 0;
 static float referenceSpeedRaw = 50;
 static float referenceAngle = 50;
 static float referenceDistance = 50;
-volatile uint8_t driveEna = 0;
+volatile uint8_t servoEna = 1;
 char txBuf[30];
 char rxBuf[64];
 uint8_t receiveState = 0;
@@ -114,7 +115,14 @@ static volatile float ctrlP = 300;
 static volatile float ctrlI = 1.2;
 static volatile float ctrlD = 0;
 static volatile float feedForward = 62;
-static volatile int16_t forceSaturation = 80;
+static int16_t forceSaturation = 80;
+
+static float automaticSuspension = 1;
+static float fixedDistance = 0;
+static float referenceFL = 50;
+static float referenceFR = 50;
+static float referenceRL = 50;
+static float referenceRR = 50;
 
 /* USER CODE END PV */
 
@@ -766,8 +774,63 @@ void StartCommTask(void const * argument)
         CDC_Transmit_FS((uint8_t*)txBuf, Len);
       }
       else if ((rxBuf[0] == 'D') && (rxBuf[1] == 'I') && (rxBuf[2] == 'S') && (rxBuf[6] == '\r')){
+        automaticSuspension = 0;
+        fixedDistance = 1;
         referenceDistance = (int16_t)((rxBuf[3]  - '0')*100 + (rxBuf[4]  - '0')*10 + (rxBuf[5]  - '0')*1);
         saturateFloat(&referenceDistance,0,100);
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'S') && (rxBuf[1] == 'U') && (rxBuf[2] == 'A') && (rxBuf[3] == '\r')){
+        automaticSuspension = 1;
+        fixedDistance = 0;
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'S') && (rxBuf[1] == 'U') && (rxBuf[2] == 'M') && (rxBuf[15] == '\r')){
+        automaticSuspension = 0;
+        fixedDistance = 0;
+        referenceFL = (int16_t)((rxBuf[3]  - '0')*100 + (rxBuf[4]  - '0')*10 + (rxBuf[5]  - '0')*1);
+        referenceFR = (int16_t)((rxBuf[6]  - '0')*100 + (rxBuf[7]  - '0')*10 + (rxBuf[8]  - '0')*1);
+        referenceRL = (int16_t)((rxBuf[9]  - '0')*100 + (rxBuf[10]  - '0')*10 + (rxBuf[11]  - '0')*1);
+        referenceRR = (int16_t)((rxBuf[12]  - '0')*100 + (rxBuf[13]  - '0')*10 + (rxBuf[14]  - '0')*1);
+        saturateFloat(&referenceFL,0,100);
+        saturateFloat(&referenceFR,0,100);
+        saturateFloat(&referenceRL,0,100);
+        saturateFloat(&referenceRR,0,100);
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'T') && (rxBuf[1] == 'G') && (rxBuf[2] == 'E') && (rxBuf[3] == '\r')){
+        timeOutGuardEna = 1;
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'T') && (rxBuf[1] == 'G') && (rxBuf[2] == 'D') && (rxBuf[3] == '\r')){
+        timeOutGuardEna = 0;
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'S') && (rxBuf[1] == 'R') && (rxBuf[2] == 'E') && (rxBuf[3] == '\r')){
+        servoEna = 1;
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'S') && (rxBuf[1] == 'R') && (rxBuf[2] == 'D') && (rxBuf[3] == '\r')){
+        servoEna = 0;
+        sprintf(txBuf, "OK: %s\r\n", rxBuf);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'P') && (rxBuf[1] == 'O') && (rxBuf[2] == 'W') && (rxBuf[6] == '\r')){
+        forceSaturation = (int16_t)((rxBuf[3]  - '0')*100 + (rxBuf[4]  - '0')*10 + (rxBuf[5]  - '0')*1);
+        saturateInteger(&forceSaturation,0,100);
         sprintf(txBuf, "OK: %s\r\n", rxBuf);
         Len = SizeofCharArray((char*)txBuf);
         CDC_Transmit_FS((uint8_t*)txBuf, Len);
@@ -787,10 +850,9 @@ void StartCommTask(void const * argument)
       timeOutGuardMax = timeOutGuard;
     }
     
-    if ((timeOutGuard) > 1000){
-      //referenceSpeedRaw = 50;
-      //referenceAngle = 50;
-      driveEna = 0;
+    if ((timeOutGuard > 1000) && timeOutGuardEna == 1){
+      referenceSpeedRaw = 50;
+      referenceAngle = 50;
     }
     osDelay(10);
   }
@@ -820,7 +882,22 @@ void StartServoTask(void const * argument)
   {
     
     ST_val = referenceAngle;
-    FL_val = FR_val = RL_val = RR_val = referenceDistance;
+    
+    if (automaticSuspension == 1) {
+      __asm("NOP");
+    }
+    else {
+      if (fixedDistance == 1) {
+        FL_val = FR_val = RL_val = RR_val = referenceDistance;
+      }
+      else {
+        FL_val = referenceFL;
+        FR_val = referenceFR;
+        RL_val = referenceRL;
+        RR_val = referenceRR;
+      }
+    }
+    
     
     TIM2->CCR1 = (int)((RL_val / (100 / (RL_max - RL_min)) + RL_min) * 36000) / 100; //Servo RL
     TIM2->CCR2 = (int)(((100 - RR_val) / (100 / (RR_max - RR_min)) + RR_min) * 36000) / 100; //Servo RR
@@ -828,6 +905,14 @@ void StartServoTask(void const * argument)
     TIM2->CCR4 = (int)((FR_val / (100 / (FR_max - FR_min)) + FR_min) * 36000) / 100; //Servo FR
     
     TIM3->CCR1 = (int)(((100 - ST_val) / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
+    
+    if (servoEna == 1){
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET); //SERVO ENABLED
+    }
+    else {
+      HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET); //SERVO DISABLED
+    }
+    
     osDelay(10);
   }
   /* USER CODE END StartServoTask */
