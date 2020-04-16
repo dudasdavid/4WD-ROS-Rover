@@ -1,3 +1,6 @@
 [submodule "ROS/rover_s_node"]
 	path = ROS/rover_s_node
 	url = https://github.com/dudasdavid/rover_s_node
+[submodule "ROS/line_follower"]
+	path = ROS/line_follower
+	url = https://github.com/dudasdavid/line_follower
