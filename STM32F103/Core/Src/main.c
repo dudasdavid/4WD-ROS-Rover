@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include <math.h>
 #include <stdbool.h>
+#include "pid.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,7 +38,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define ABS(x)         (x < 0) ? (-x) : x
-#define PI     3.14159
+#define PI     3.14159f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -68,7 +69,7 @@ static volatile float referenceSpeed = 0;
 static float referenceSpeedRaw = 50;
 static float referenceAngle = 50;
 static float referenceDistance = 50;
-volatile uint8_t servoEna = 1;
+volatile uint8_t servoEna = 0;
 char txBuf[30];
 char rxBuf[64];
 uint8_t receiveState = 0;
@@ -95,8 +96,8 @@ static uint32_t motCntr = 0; //Motor encoder
 static uint32_t motCntrPrev = 0;
 static uint32_t motSpeedRaw = 0;
 static volatile float motSpeed = 0;
-static float raw2mps = 4000.0;
-static volatile int16_t controlTaskCycle_ms = 10;
+static float raw2mps = 2000.f;
+static volatile int16_t controlTaskCycle_ms = 20;
 
 static volatile int16_t pwm1 = 0;
 static volatile int16_t pwm2 = 0;
@@ -108,14 +109,14 @@ static volatile float speedIntError = 0;
 static volatile float speedDerivatedError = 0;
 static int16_t forceMotor = 0;
 static volatile int16_t forceMotorBeforeSaturation = 0;
-static volatile int16_t absForceMotor = 0;
+static volatile uint16_t absForceMotor = 0;
 
 static volatile float antiWindup = 0;
 static volatile float ctrlP = 300;
-static volatile float ctrlI = 1.2;
+static volatile float ctrlI = 0.2;
 static volatile float ctrlD = 0;
-static volatile float feedForward = 62;
-static int16_t forceSaturation = 80;
+static volatile float feedForward = 15;
+static int16_t forceSaturation = 90;
 
 static float automaticSuspension = 1;
 static float fixedDistance = 0;
@@ -123,6 +124,8 @@ static float referenceFL = 50;
 static float referenceFR = 50;
 static float referenceRL = 50;
 static float referenceRR = 50;
+
+static PID_t controller;
 
 /* USER CODE END PV */
 
@@ -597,7 +600,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : MOT_ENC_Pin */
   GPIO_InitStruct.Pin = MOT_ENC_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(MOT_ENC_GPIO_Port, &GPIO_InitStruct);
 
@@ -690,6 +693,13 @@ void StartDefaultTask(void const * argument)
 void StartMotorControlTask(void const * argument)
 {
   /* USER CODE BEGIN StartMotorControlTask */
+  pid_initialize(&controller); 
+  controller.config.P          = ctrlP;
+  controller.config.I          = ctrlI;
+  controller.config.D          = 0.f;
+  controller.config.LowerLimit = 0.f;
+  controller.config.UpperLimit = forceSaturation;
+  
   /* Infinite loop */
   for(;;)
   {
@@ -697,42 +707,51 @@ void StartMotorControlTask(void const * argument)
     referenceSpeed = (referenceSpeedRaw - 50)/100.0;
     
     motSpeedRaw = motCntr - motCntrPrev;
-    motSpeed = motSpeedRaw / raw2mps * 1000.0 / controlTaskCycle_ms;
+    motSpeed = (motSpeedRaw * 1000.f) / (raw2mps * controlTaskCycle_ms);
     
     motCntrPrev = motCntr;
     
     motSpeedFiltered = filter2(motSpeedFiltered, motSpeed, 0.35);
     
-    speedErrorPrev = speedError;
-    speedError = fabs(referenceSpeed) - motSpeedFiltered;
-    speedIntError = speedIntError + speedError + antiWindup * (forceMotor - forceMotorBeforeSaturation);
-    speedDerivatedError = speedError - speedErrorPrev;
-    forceMotor = (int)(ctrlP * speedError + ctrlI * speedIntError + ctrlD * speedDerivatedError);
-    
-    if (fabs(referenceSpeed) < 0.01) {
-      speedIntError -= speedIntError*0.03;
-    }
-    else {
-      forceMotor += feedForward;
-    }
-    
-    forceMotorBeforeSaturation = forceMotor;
-    
-    saturateInteger(&forceMotor, 0, forceSaturation);
-    absForceMotor = ABS(forceMotor);
+#ifdef OLD
+      speedErrorPrev = speedError;
+      speedError = fabs(referenceSpeed) - motSpeedFiltered;
+      speedIntError = speedIntError + speedError + antiWindup * (forceMotor - forceMotorBeforeSaturation);
+      speedDerivatedError = speedError - speedErrorPrev;
+      forceMotor = (int)(ctrlP * speedError + ctrlI * speedIntError + ctrlD * speedDerivatedError);
+      
+      if (fabs(referenceSpeed) < 0.01) {
+        speedIntError -= speedIntError*0.03;
+      }
+      else {
+        forceMotor += feedForward;
+      }
+      
+      forceMotorBeforeSaturation = forceMotor;
+      
+      saturateInteger(&forceMotor, 0, forceSaturation);
+      absForceMotor = ABS(forceMotor);
+#else
+      absForceMotor = (uint16_t) lroundf(pid_update(&controller, fabs(referenceSpeed), motSpeed));
+      if (fabs(referenceSpeed) > 0.01) {
+        absForceMotor += feedForward;
+        saturateInteger((int16_t*)&absForceMotor, 0, forceSaturation);
+      }
+      
+#endif
     
     if ((pwm1 != 0) || (pwm2 != 0)){
       TIM1->CCR1 = pwm1*3600/100; //DC motor +
       TIM1->CCR2 = pwm2*3600/100; //DC motor -
     }
     else {
-      if (referenceSpeed < 0){
-          TIM1->CCR1 = absForceMotor*3600/100; //DC motor +
-          TIM1->CCR2 = 0*3600/100; //DC motor -
+      if (referenceSpeed > 0){
+          TIM1->CCR1 = (100-absForceMotor)*3600/100; //DC motor +
+          TIM1->CCR2 = 100*3600/100; //DC motor -
       }
       else {
-          TIM1->CCR1 = 0*3600/100; //DC motor +
-          TIM1->CCR2 = absForceMotor*3600/100; //DC motor -
+          TIM1->CCR1 = 100*3600/100; //DC motor +
+          TIM1->CCR2 = (100-absForceMotor)*3600/100; //DC motor -
       }
     }
     
@@ -876,7 +895,7 @@ void StartServoTask(void const * argument)
   
   TIM3->CCR1 = (int)(((100 - ST_val) / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
   osDelay(100);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET); //SERVO ENABLED
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET); //SERVO DISABLED
   /* Infinite loop */
   for(;;)
   {
