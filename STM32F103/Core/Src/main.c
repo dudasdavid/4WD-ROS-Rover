@@ -566,9 +566,6 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(PC13_LED_GPIO_Port, PC13_LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(IMU_LRDY_GPIO_Port, IMU_LRDY_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(ENA_SERVO_GPIO_Port, ENA_SERVO_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PC13_LED_Pin */
@@ -578,15 +575,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(PC13_LED_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : IMU_LRDY_Pin */
-  GPIO_InitStruct.Pin = IMU_LRDY_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(IMU_LRDY_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : IMU_LIN2_Pin IMU_LIN1_Pin IMU_GRDY_Pin IMU_GINT_Pin */
-  GPIO_InitStruct.Pin = IMU_LIN2_Pin|IMU_LIN1_Pin|IMU_GRDY_Pin|IMU_GINT_Pin;
+  /*Configure GPIO pins : IMU_LRDY_Pin IMU_LIN2_Pin IMU_LIN1_Pin IMU_GRDY_Pin 
+                           IMU_GINT_Pin */
+  GPIO_InitStruct.Pin = IMU_LRDY_Pin|IMU_LIN2_Pin|IMU_LIN1_Pin|IMU_GRDY_Pin 
+                          |IMU_GINT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);

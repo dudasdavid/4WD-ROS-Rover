@@ -1190,12 +1190,33 @@
         <group>
             <name>Components</name>
             <group>
-                <name>pid</name>
+                <name>BSP</name>
+                <file>
+                    <name>$PROJ_DIR$\..\Components\bsp\stm32f411e_discovery.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\Components\bsp\stm32f411e_discovery_accelerometer.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\Components\bsp\stm32f411e_discovery_gyroscope.c</name>
+                </file>
+            </group>
+            <group>
+                <name>PID</name>
                 <file>
                     <name>$PROJ_DIR$\..\Components\pid\functions.c</name>
                 </file>
                 <file>
                     <name>$PROJ_DIR$\..\Components\pid\pid.c</name>
+                </file>
+            </group>
+            <group>
+                <name>Sensors</name>
+                <file>
+                    <name>$PROJ_DIR$\..\Components\sensors\l3gd20.c</name>
+                </file>
+                <file>
+                    <name>$PROJ_DIR$\..\Components\sensors\lsm303dlhc.c</name>
                 </file>
             </group>
         </group>
