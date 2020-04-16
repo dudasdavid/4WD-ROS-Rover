@@ -4,3 +4,6 @@
 [submodule "ROS/line_follower"]
 	path = ROS/line_follower
 	url = https://github.com/dudasdavid/line_follower
+[submodule "ROS/raspicam_node"]
+	path = ROS/raspicam_node
+	url = https://github.com/dudasdavid/raspicam_node
