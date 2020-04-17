@@ -88,12 +88,11 @@ void Error_Handler(void);
 #define TIM1_CH2_DC_MINUS_GPIO_Port GPIOA
 #define ENA_SERVO_Pin GPIO_PIN_10
 #define ENA_SERVO_GPIO_Port GPIOA
-#define MOT_ENC_Pin GPIO_PIN_6
-#define MOT_ENC_GPIO_Port GPIOB
-#define MOT_ENC_EXTI_IRQn EXTI9_5_IRQn
-#define IMU_SCL_Pin GPIO_PIN_8
+#define EXTI_ENC_Pin GPIO_PIN_5
+#define EXTI_ENC_GPIO_Port GPIOB
+#define IMU_SCL_Pin GPIO_PIN_6
 #define IMU_SCL_GPIO_Port GPIOB
-#define IMU_SDA_Pin GPIO_PIN_9
+#define IMU_SDA_Pin GPIO_PIN_7
 #define IMU_SDA_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 

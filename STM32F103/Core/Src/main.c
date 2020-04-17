@@ -28,6 +28,8 @@
 #include <math.h>
 #include <stdbool.h>
 #include "pid.h"
+#include "i2c_handler.h"
+#include "lsm303dlhc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -127,6 +129,8 @@ static float referenceRR = 50;
 
 static PID_t controller;
 
+static volatile uint8_t whoamireg = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -198,6 +202,12 @@ int main(void)
   
   TIM1->CCR1 = 0*3600/100; //DC motor +
   TIM1->CCR2 = 0*3600/100; //DC motor -
+  
+
+  __HAL_RCC_I2C1_FORCE_RESET();
+  HAL_Delay(2);
+  __HAL_RCC_I2C1_RELEASE_RESET();
+    
   
   /* USER CODE END 2 */
 
@@ -590,15 +600,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(ENA_SERVO_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : MOT_ENC_Pin */
-  GPIO_InitStruct.Pin = MOT_ENC_Pin;
+  /*Configure GPIO pin : EXTI_ENC_Pin */
+  GPIO_InitStruct.Pin = EXTI_ENC_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(MOT_ENC_GPIO_Port, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
-  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(EXTI_ENC_GPIO_Port, &GPIO_InitStruct);
 
 }
 
@@ -606,7 +612,7 @@ static void MX_GPIO_Init(void)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
   switch ( GPIO_Pin ) {
-  case GPIO_PIN_6:
+  case GPIO_PIN_5:
     motCntr++;
     break; 
   default:
@@ -939,10 +945,17 @@ void StartServoTask(void const * argument)
 void StartSensorTask(void const * argument)
 {
   /* USER CODE BEGIN StartSensorTask */
+  uint8_t a;
+  whoamireg = I2Cx_ReadData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_WHO_AM_I_ADDR);
+  
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    for( a = 0; a < 255; a++ ){
+      whoamireg = I2Cx_ReadData(&hi2c1, a, LSM303DLHC_WHO_AM_I_ADDR);
+      osDelay(100);
+   }
+    
   }
   /* USER CODE END StartSensorTask */
 }

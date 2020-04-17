@@ -365,6 +365,7 @@
           <state>$PROJ_DIR$/../Components/pid</state>
           <state>$PROJ_DIR$/../Components/bsp</state>
           <state>$PROJ_DIR$/../Components/sensors</state>
+          <state>$PROJ_DIR$/../Components/i2c_handler</state>
         </option>
         <option>
           <name>CCStdIncCheck</name>
@@ -1065,6 +1066,12 @@
         </file>
         <file>
           <name>$PROJ_DIR$\..\Components\bsp\stm32f411e_discovery_gyroscope.c</name>
+        </file>
+      </group>
+      <group>
+        <name>i2c_handler</name>
+        <file>
+          <name>$PROJ_DIR$\..\Components\i2c_handler\i2c_handler.c</name>
         </file>
       </group>
       <group>

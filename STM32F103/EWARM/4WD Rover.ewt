@@ -1202,6 +1202,12 @@
                 </file>
             </group>
             <group>
+                <name>i2c_handler</name>
+                <file>
+                    <name>$PROJ_DIR$\..\Components\i2c_handler\i2c_handler.c</name>
+                </file>
+            </group>
+            <group>
                 <name>PID</name>
                 <file>
                     <name>$PROJ_DIR$\..\Components\pid\functions.c</name>
