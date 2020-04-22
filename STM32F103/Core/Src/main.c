@@ -204,9 +204,9 @@ int main(void)
   TIM1->CCR2 = 0*3600/100; //DC motor -
   
 
-  __HAL_RCC_I2C1_FORCE_RESET();
-  HAL_Delay(2);
-  __HAL_RCC_I2C1_RELEASE_RESET();
+  //__HAL_RCC_I2C1_FORCE_RESET();
+  //HAL_Delay(2);
+  //__HAL_RCC_I2C1_RELEASE_RESET();
     
   
   /* USER CODE END 2 */
@@ -329,7 +329,7 @@ static void MX_I2C1_Init(void)
   hi2c1.Instance = I2C1;
   hi2c1.Init.ClockSpeed = 100000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.OwnAddress1 = 0x08;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c1.Init.OwnAddress2 = 0;
@@ -600,11 +600,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(ENA_SERVO_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : EXTI_ENC_Pin */
-  GPIO_InitStruct.Pin = EXTI_ENC_Pin;
+  /*Configure GPIO pin : EXTI5_ENC_Pin */
+  GPIO_InitStruct.Pin = EXTI5_ENC_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(EXTI_ENC_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(EXTI5_ENC_GPIO_Port, &GPIO_InitStruct);
 
 }
 
@@ -946,15 +946,38 @@ void StartSensorTask(void const * argument)
 {
   /* USER CODE BEGIN StartSensorTask */
   uint8_t a;
-  whoamireg = I2Cx_ReadData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_WHO_AM_I_ADDR);
+  //whoamireg = I2Cx_ReadData(&hi2c1, 0x19, LSM303DLHC_WHO_AM_I_ADDR);
+  uint8_t ret;
+  uint8_t buf[12];
+  buf[0] = 0x0F;
+
+  //ret = HAL_I2C_Master_Receive(&hi2c1, 0x32, buf, 1, I2Cx_TIMEOUT_MAX);
+  //ret = HAL_I2C_Master_Transmit(&hi2c1, 0x32, buf, 1, I2Cx_TIMEOUT_MAX);
+  //if ( ret != HAL_OK ) {
+  //  __asm("NOP");
+  //}
+  //else {
+
+    // Read 2 bytes from the temperature register
+    //ret = HAL_I2C_Master_Receive(&hi2c1, 0x32, buf, 1, I2Cx_TIMEOUT_MAX);
+    //if ( ret != HAL_OK ) {
+    //  __asm("NOP");
+    //}
+    
+  //}
+  
+  osDelay(2000);
+  ret = HAL_I2C_Master_Receive(&hi2c1, 0x32, buf, 1, I2Cx_TIMEOUT_MAX);
+  a = I2Cx_ReadData(&hi2c1, 0x32, 0x0F);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Infinite loop */
   for(;;)
   {
-    for( a = 0; a < 255; a++ ){
-      whoamireg = I2Cx_ReadData(&hi2c1, a, LSM303DLHC_WHO_AM_I_ADDR);
-      osDelay(100);
-   }
+    a = I2Cx_ReadData(&hi2c1, 0x32, 0x0F);
+    osDelay(100);
     
   }
   /* USER CODE END StartSensorTask */

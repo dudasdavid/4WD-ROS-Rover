@@ -88,8 +88,8 @@ void Error_Handler(void);
 #define TIM1_CH2_DC_MINUS_GPIO_Port GPIOA
 #define ENA_SERVO_Pin GPIO_PIN_10
 #define ENA_SERVO_GPIO_Port GPIOA
-#define EXTI_ENC_Pin GPIO_PIN_5
-#define EXTI_ENC_GPIO_Port GPIOB
+#define EXTI5_ENC_Pin GPIO_PIN_5
+#define EXTI5_ENC_GPIO_Port GPIOB
 #define IMU_SCL_Pin GPIO_PIN_6
 #define IMU_SCL_GPIO_Port GPIOB
 #define IMU_SDA_Pin GPIO_PIN_7
