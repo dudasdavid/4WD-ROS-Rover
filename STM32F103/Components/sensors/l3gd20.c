@@ -37,6 +37,7 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "l3gd20.h"
+#include "i2c_handler.h"
 
 /** @addtogroup BSP
   * @{
@@ -92,6 +93,8 @@ GYRO_DrvTypeDef L3gd20Drv =
   L3GD20_ReadXYZAngRate
 };
 
+extern I2C_HandleTypeDef hi2c1;
+
 /**
   * @}
   */
@@ -107,7 +110,57 @@ GYRO_DrvTypeDef L3gd20Drv =
 /** @defgroup L3GD20_Private_Functions
   * @{
   */
+    
+static GYRO_DrvTypeDef *GyroscopeDrv;
 
+void GYRO_Init(void)
+{  
+  uint16_t ctrl = 0x0000;
+  GYRO_InitTypeDef         L3GD20_InitStructure;
+  GYRO_FilterConfigTypeDef L3GD20_FilterStructure = {0,0};
+ 
+  if((L3gd20Drv.ReadID() == I_AM_L3GD20) || (L3gd20Drv.ReadID() == I_AM_L3GD20_TR))
+  {
+    /* Initialize the Gyroscope driver structure */
+    GyroscopeDrv = &L3gd20Drv;
+
+    /* MEMS configuration ----------------------------------------------------*/
+    /* Fill the Gyroscope structure */
+    L3GD20_InitStructure.Power_Mode = L3GD20_MODE_ACTIVE;
+    L3GD20_InitStructure.Output_DataRate = L3GD20_OUTPUT_DATARATE_1;
+    L3GD20_InitStructure.Axes_Enable = L3GD20_AXES_ENABLE;
+    L3GD20_InitStructure.Band_Width = L3GD20_BANDWIDTH_4;
+    L3GD20_InitStructure.BlockData_Update = L3GD20_BlockDataUpdate_Continous;
+    L3GD20_InitStructure.Endianness = L3GD20_BLE_LSB;
+    L3GD20_InitStructure.Full_Scale = L3GD20_FULLSCALE_500; 
+  
+    /* Configure MEMS: data rate, power mode, full scale and axes */
+    ctrl = (uint16_t) (L3GD20_InitStructure.Power_Mode | L3GD20_InitStructure.Output_DataRate | \
+                      L3GD20_InitStructure.Axes_Enable | L3GD20_InitStructure.Band_Width);
+  
+    ctrl |= (uint16_t) ((L3GD20_InitStructure.BlockData_Update | L3GD20_InitStructure.Endianness | \
+                        L3GD20_InitStructure.Full_Scale) << 8);
+
+    /* Configure the Gyroscope main parameters */
+    GyroscopeDrv->Init(ctrl);
+  
+    L3GD20_FilterStructure.HighPassFilter_Mode_Selection =L3GD20_HPM_NORMAL_MODE_RES;
+    L3GD20_FilterStructure.HighPassFilter_CutOff_Frequency = L3GD20_HPFCF_0;
+  
+    ctrl = (uint8_t) ((L3GD20_FilterStructure.HighPassFilter_Mode_Selection |\
+                       L3GD20_FilterStructure.HighPassFilter_CutOff_Frequency));    
+  
+    /* Configure the Gyroscope main parameters */
+    GyroscopeDrv->FilterConfig(ctrl) ;
+  
+    GyroscopeDrv->FilterCmd(L3GD20_HIGHPASSFILTER_ENABLE);
+  
+  }
+}
+    
+    
+    
+    
 /**
   * @brief  Set L3GD20 Initialization.
   * @param  L3GD20_InitStruct: pointer to a L3GD20_InitTypeDef structure 
@@ -117,17 +170,24 @@ GYRO_DrvTypeDef L3gd20Drv =
 void L3GD20_Init(uint16_t InitStruct)
 {  
   static uint8_t ctrl = 0x00;
+  static uint8_t ret;
   
-  /* Configure the low level interface */
-  GYRO_IO_Init();
   
   /* Write value to MEMS CTRL_REG1 register */
   ctrl = (uint8_t) InitStruct;
-  GYRO_IO_Write(&ctrl, L3GD20_CTRL_REG1_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG1_ADDR, &ctrl, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Write value to MEMS CTRL_REG4 register */  
   ctrl = (uint8_t) (InitStruct >> 8);
-  GYRO_IO_Write(&ctrl, L3GD20_CTRL_REG4_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG4_ADDR, &ctrl, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -138,12 +198,15 @@ void L3GD20_Init(uint16_t InitStruct)
 uint8_t L3GD20_ReadID(void)
 {
   uint8_t tmp;
+  static uint8_t ret;
   
-  /* Configure the low level interface */
-  GYRO_IO_Init();
-  
+
   /* Read WHO I AM register */
-  GYRO_IO_Read(&tmp, L3GD20_WHO_AM_I_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_WHO_AM_I_ADDR, &tmp);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Return the ID */
   return (uint8_t)tmp;
@@ -157,15 +220,24 @@ uint8_t L3GD20_ReadID(void)
 void L3GD20_RebootCmd(void)
 {
   uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read CTRL_REG5 register */
-  GYRO_IO_Read(&tmpreg, L3GD20_CTRL_REG5_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG5_ADDR, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Enable or Disable the reboot memory */
   tmpreg |= L3GD20_BOOT_REBOOTMEMORY;
   
   /* Write value to MEMS CTRL_REG5 register */
-  GYRO_IO_Write(&tmpreg, L3GD20_CTRL_REG5_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG5_ADDR, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -176,12 +248,21 @@ void L3GD20_RebootCmd(void)
 void L3GD20_INT1InterruptConfig(uint16_t Int1Config)
 {
   uint8_t ctrl_cfr = 0x00, ctrl3 = 0x00;
+  static uint8_t ret;
   
   /* Read INT1_CFG register */
-  GYRO_IO_Read(&ctrl_cfr, L3GD20_INT1_CFG_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_INT1_CFG_ADDR, &ctrl_cfr);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Read CTRL_REG3 register */
-  GYRO_IO_Read(&ctrl3, L3GD20_CTRL_REG3_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG3_ADDR, &ctrl3);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   ctrl_cfr &= 0x80;
   ctrl_cfr |= ((uint8_t) Int1Config >> 8);
@@ -190,10 +271,18 @@ void L3GD20_INT1InterruptConfig(uint16_t Int1Config)
   ctrl3 |= ((uint8_t) Int1Config);   
   
   /* Write value to MEMS INT1_CFG register */
-  GYRO_IO_Write(&ctrl_cfr, L3GD20_INT1_CFG_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_INT1_CFG_ADDR, &ctrl_cfr, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Write value to MEMS CTRL_REG3 register */
-  GYRO_IO_Write(&ctrl3, L3GD20_CTRL_REG3_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG3_ADDR, &ctrl3, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -207,9 +296,15 @@ void L3GD20_INT1InterruptConfig(uint16_t Int1Config)
 void L3GD20_EnableIT(uint8_t IntSel)
 {  
   uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read CTRL_REG3 register */
-  GYRO_IO_Read(&tmpreg, L3GD20_CTRL_REG3_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG3_ADDR, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
   
   if(IntSel == L3GD20_INT1)
   {
@@ -223,7 +318,11 @@ void L3GD20_EnableIT(uint8_t IntSel)
   }
   
   /* Write value to MEMS CTRL_REG3 register */
-  GYRO_IO_Write(&tmpreg, L3GD20_CTRL_REG3_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG3_ADDR, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -237,9 +336,14 @@ void L3GD20_EnableIT(uint8_t IntSel)
 void L3GD20_DisableIT(uint8_t IntSel)
 {  
   uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read CTRL_REG3 register */
-  GYRO_IO_Read(&tmpreg, L3GD20_CTRL_REG3_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG3_ADDR, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   if(IntSel == L3GD20_INT1)
   {
@@ -253,7 +357,11 @@ void L3GD20_DisableIT(uint8_t IntSel)
   }
   
   /* Write value to MEMS CTRL_REG3 register */
-  GYRO_IO_Write(&tmpreg, L3GD20_CTRL_REG3_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG3_ADDR, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -264,9 +372,14 @@ void L3GD20_DisableIT(uint8_t IntSel)
 void L3GD20_FilterConfig(uint8_t FilterStruct) 
 {
   uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read CTRL_REG2 register */
-  GYRO_IO_Read(&tmpreg, L3GD20_CTRL_REG2_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG2_ADDR, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   tmpreg &= 0xC0;
   
@@ -274,7 +387,11 @@ void L3GD20_FilterConfig(uint8_t FilterStruct)
   tmpreg |= FilterStruct;
   
   /* Write value to MEMS CTRL_REG2 register */
-  GYRO_IO_Write(&tmpreg, L3GD20_CTRL_REG2_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG2_ADDR, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -288,16 +405,26 @@ void L3GD20_FilterConfig(uint8_t FilterStruct)
 void L3GD20_FilterCmd(uint8_t HighPassFilterState)
 {
   uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read CTRL_REG5 register */
-  GYRO_IO_Read(&tmpreg, L3GD20_CTRL_REG5_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG5_ADDR, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   tmpreg &= 0xEF;
   
   tmpreg |= HighPassFilterState;
   
   /* Write value to MEMS CTRL_REG5 register */
-  GYRO_IO_Write(&tmpreg, L3GD20_CTRL_REG5_ADDR, 1);
+  ret = I2Cx_WriteData(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG5_ADDR, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
 }
 
 /**
@@ -308,9 +435,14 @@ void L3GD20_FilterCmd(uint8_t HighPassFilterState)
 uint8_t L3GD20_GetDataStatus(void)
 {
   uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read STATUS_REG register */
-  GYRO_IO_Read(&tmpreg, L3GD20_STATUS_REG_ADDR, 1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_STATUS_REG_ADDR, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   return tmpreg;
 }
@@ -327,10 +459,19 @@ void L3GD20_ReadXYZAngRate(float *pfData)
   uint8_t tmpreg = 0;
   float sensitivity = 0;
   int i =0;
+  static uint8_t ret;
   
-  GYRO_IO_Read(&tmpreg,L3GD20_CTRL_REG4_ADDR,1);
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_CTRL_REG4_ADDR, &tmpreg);
   
-  GYRO_IO_Read(tmpbuffer,L3GD20_OUT_X_L_ADDR,6);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+  ret = I2Cx_ReadMultipleBytes(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_OUT_ADDR, tmpbuffer, 6);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+
   
   /* check in the control register 4 the data alignment (Big Endian or Little Endian)*/
   if(!(tmpreg & L3GD20_BLE_MSB))
@@ -368,6 +509,24 @@ void L3GD20_ReadXYZAngRate(float *pfData)
   {
     pfData[i]=(float)(RawData[i] * sensitivity);
   }
+}
+
+void L3GD20_ReadTemp(float *pfData)
+{
+  uint8_t tmp;
+  static uint8_t ret;
+  static uint8_t rawTempGyro;
+  
+  /* Read WHO I AM register */
+  ret = I2Cx_ReadSingleByte(&hi2c1, L3GD20_I2C_ADDRESS, L3GD20_OUT_TEMP_ADDR, &tmp);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+  rawTempGyro = tmp;
+  
+  pfData[0] = (float)((25 - ((int8_t)(rawTempGyro))) + 25 - 9);
 }
 
 /**

@@ -45,6 +45,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stdlib.h>
 
 /** @addtogroup BSP
   * @{
@@ -110,6 +111,13 @@ typedef struct
   uint8_t MagFull_Scale;                     /* Full Scale selection */
 }LACCELERO_InitTypeDef;
 
+
+typedef enum 
+{
+  ACCELERO_OK = 0,
+  ACCELERO_ERROR = 1,
+  ACCELERO_TIMEOUT = 2
+}ACCELERO_StatusTypeDef;
 /**
   * @}
   */

@@ -37,46 +37,8 @@
   */
 /* Includes ------------------------------------------------------------------*/
 #include "lsm303dlhc.h"
+#include "i2c_handler.h"
 
-/** @addtogroup BSP
-  * @{
-  */ 
-
-/** @addtogroup Components
-  * @{
-  */ 
-
-/** @addtogroup LSM303DLHC
-  * @{
-  */
-
-/** @defgroup LSM303DLHC_Private_TypesDefinitions
-  * @{
-  */
-
-/**
-  * @}
-  */
-
-/** @defgroup LSM303DLHC_Private_Defines
-  * @{
-  */
-
-/**
-  * @}
-  */
-
-/** @defgroup LSM303DLHC_Private_Macros
-  * @{
-  */
-
-/**
-  * @}
-  */ 
-  
-/** @defgroup LSM303DLHC_Private_Variables
-  * @{
-  */ 
 ACCELERO_DrvTypeDef Lsm303dlhcDrv =
 {
   LSM303DLHC_AccInit,
@@ -96,6 +58,111 @@ uint8_t tmpreg2A[8] = {0x00};
 uint8_t tmpreg3A = 0x00;
 uint8_t tmpregcfgA = 0x00;
 
+extern I2C_HandleTypeDef hi2c1;
+
+static ACCELERO_DrvTypeDef *AccelerometerDrv;
+
+void ACCELERO_Init(void)
+{
+  uint16_t ctrl = 0x0000;
+  ACCELERO_InitTypeDef         LSM303DLHC_InitStructure;
+  ACCELERO_FilterConfigTypeDef LSM303DLHC_FilterStructure = {0,0,0,0};
+  
+  if(Lsm303dlhcDrv.ReadID() == I_AM_LMS303DLHC)
+  {
+    /* Initialize the Accelerometer driver structure */
+    AccelerometerDrv = &Lsm303dlhcDrv;
+
+    /* MEMS configuration ----------------------------------------------------*/
+    /* Fill the Accelerometer structure */
+    LSM303DLHC_InitStructure.Power_Mode = LSM303DLHC_NORMAL_MODE;
+    LSM303DLHC_InitStructure.AccOutput_DataRate = LSM303DLHC_ODR_50_HZ;
+    LSM303DLHC_InitStructure.Axes_Enable = LSM303DLHC_AXES_ENABLE;
+    LSM303DLHC_InitStructure.AccFull_Scale = LSM303DLHC_FULLSCALE_2G;
+    LSM303DLHC_InitStructure.BlockData_Update = LSM303DLHC_BlockUpdate_Continous;
+    LSM303DLHC_InitStructure.Endianness = LSM303DLHC_BLE_LSB;
+    LSM303DLHC_InitStructure.High_Resolution = LSM303DLHC_HR_ENABLE;
+    
+    /* Configure MEMS: data rate, power mode, full scale and axes */
+    ctrl |= (LSM303DLHC_InitStructure.Power_Mode | LSM303DLHC_InitStructure.AccOutput_DataRate | \
+                       LSM303DLHC_InitStructure.Axes_Enable);
+    
+    ctrl |= ((LSM303DLHC_InitStructure.BlockData_Update | LSM303DLHC_InitStructure.Endianness | \
+                      LSM303DLHC_InitStructure.AccFull_Scale | LSM303DLHC_InitStructure.High_Resolution) << 8);
+    
+    /* Configure the Accelerometer main parameters */
+    AccelerometerDrv->Init(ctrl);
+    
+    /* Fill the Accelerometer LPF structure */
+    LSM303DLHC_FilterStructure.HighPassFilter_Mode_Selection =LSM303DLHC_HPM_NORMAL_MODE;
+    LSM303DLHC_FilterStructure.HighPassFilter_CutOff_Frequency = LSM303DLHC_HPFCF_16;
+    LSM303DLHC_FilterStructure.HighPassFilter_AOI1 = LSM303DLHC_HPF_AOI1_DISABLE;
+    LSM303DLHC_FilterStructure.HighPassFilter_AOI2 = LSM303DLHC_HPF_AOI2_DISABLE;
+    
+    /* Configure MEMS: mode, cutoff frquency, Filter status, Click, AOI1 and AOI2 */
+    ctrl = (uint8_t) (LSM303DLHC_FilterStructure.HighPassFilter_Mode_Selection |\
+                      LSM303DLHC_FilterStructure.HighPassFilter_CutOff_Frequency|\
+                      LSM303DLHC_FilterStructure.HighPassFilter_AOI1|\
+                      LSM303DLHC_FilterStructure.HighPassFilter_AOI2);
+
+    /* Configure the Accelerometer LPF main parameters */
+    AccelerometerDrv->FilterConfig(ctrl);
+
+  }
+}
+
+
+void ACCELERO_Reset(void)
+{
+  if(AccelerometerDrv->Reset != NULL)
+  {
+    AccelerometerDrv->Reset();
+  }  
+}
+
+/**
+  * @brief  Configure Accelerometer click IT. 
+  */
+void ACCELERO_Click_ITConfig(void)
+{
+  if(AccelerometerDrv->ConfigIT!= NULL)
+  {
+    AccelerometerDrv->ConfigIT();
+  }
+}
+
+/**
+  * @brief  Get XYZ axes acceleration.
+  * @param  pDataXYZ: Pointer to 3 angular acceleration axes.  
+  *                   pDataXYZ[0] = X axis, pDataXYZ[1] = Y axis, pDataXYZ[2] = Z axis
+  */
+void ACCELERO_GetXYZ(float *pfDataXYZ)
+{
+  //float SwitchXY = 0;
+  
+  if(AccelerometerDrv->GetXYZ!= NULL)
+  {
+    AccelerometerDrv->GetXYZ(pfDataXYZ);
+    
+    /* Switch X and Y Axes in case of LSM303DLHC MEMS */
+    //if(AccelerometerDrv == &Lsm303dlhcDrv)
+    //{ 
+    //  SwitchXY  = pfDataXYZ[0];
+    //  pfDataXYZ[0] = pfDataXYZ[1];
+    //  
+    //  /* Invert Y Axis to be conpliant with LIS3DSH */
+    //  pfDataXYZ[1] = -SwitchXY;
+    //} 
+  }
+}
+
+
+
+
+
+
+
+
 /**
   * @}
   */
@@ -111,18 +178,25 @@ uint8_t tmpregcfgA = 0x00;
   */
 void LSM303DLHC_AccInit(uint16_t InitStruct)
 {  
-  static volatile uint8_t ctrl1 = 0x00;
-  static volatile uint8_t ctrl4 = 0x00;
-  /*  Low level init */
-  COMPASSACCELERO_IO_Init();
-  
+  static uint8_t ctrl1 = 0x00;
+  static uint8_t ctrl4 = 0x00;
+  static uint8_t ret;
+
   /* Write value to ACC MEMS CTRL_REG1 register */
   ctrl1 = InitStruct & 0x00FF;
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG1_A, ctrl1);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG1_A, &ctrl1, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Write value to ACC MEMS CTRL_REG4 register */
   ctrl4 = (InitStruct & 0xFF00) >> 8;
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG4_A, ctrl4);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG4_A, &ctrl4, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -132,15 +206,17 @@ void LSM303DLHC_AccInit(uint16_t InitStruct)
   */
 uint8_t LSM303DLHC_AccReadID(void)
 {  
-  uint8_t ctrl = 0x00;
-  
-  /* Low level init */
-  COMPASSACCELERO_IO_Init();
+  uint8_t buf;
+  static uint8_t ret;
   
   /* Read value at Who am I register address */
-  ctrl = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_WHO_AM_I_ADDR);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_WHO_AM_I_ADDR, &buf);
   
-  return ctrl;
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+  return buf;
 }
 
 /**
@@ -151,15 +227,24 @@ uint8_t LSM303DLHC_AccReadID(void)
 void LSM303DLHC_AccRebootCmd(void)
 {
   uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read CTRL_REG5 register */
-  tmpreg = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG5_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG5_A, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Enable or Disable the reboot memory */
   tmpreg |= LSM303DLHC_BOOT_REBOOTMEMORY;
   
   /* Write value to ACC MEMS CTRL_REG5 register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG5_A, tmpreg);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG5_A, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -169,16 +254,25 @@ void LSM303DLHC_AccRebootCmd(void)
   */
 void LSM303DLHC_AccFilterConfig(uint8_t FilterStruct) 
 {
-  static volatile uint8_t tmpreg;
+  static uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read CTRL_REG2 register */
-  tmpreg = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   tmpreg &= 0x0C;
   tmpreg |= FilterStruct;
   
   /* Write value to ACC MEMS CTRL_REG2 register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, tmpreg);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -192,16 +286,24 @@ void LSM303DLHC_AccFilterConfig(uint8_t FilterStruct)
 void LSM303DLHC_AccFilterCmd(uint8_t HighPassFilterState)
 {
   uint8_t tmpreg;
+  static uint8_t ret;
   
   /* Read CTRL_REG2 register */
-  tmpreg = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, &tmpreg);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   tmpreg &= 0xF7;
-  
   tmpreg |= HighPassFilterState;
   
   /* Write value to ACC MEMS CTRL_REG2 register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, tmpreg);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -213,22 +315,38 @@ void LSM303DLHC_AccReadXYZ(float* pfData)
 {
   int16_t pnRawData[3];
   static uint8_t ctrlx[2]={0,0};
-  int8_t buffer[6];
+  uint8_t buffer[6];
   uint8_t i = 0;
   static uint8_t sensitivity = 0;
+  static uint8_t ret;
   
-  /* Read the acceleration control register content */
-  ctrlx[0] = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG4_A);
-  ctrlx[1] = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG5_A);
+  /* Read the acceleration control register content */ 
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG4_A, &ctrlx[0]);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG5_A, &ctrlx[1]);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Read output register X, Y & Z acceleration */
-  buffer[0] = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_OUT_X_L_A); 
-  buffer[1] = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_OUT_X_H_A);
-  buffer[2] = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_OUT_Y_L_A);
-  buffer[3] = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_OUT_Y_H_A);
-  buffer[4] = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_OUT_Z_L_A);
-  buffer[5] = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_OUT_Z_H_A);
+  ret = I2Cx_ReadMultipleBytes(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_OUT_A, buffer, 6);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_OUT_X_L_A, &buffer[0]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_OUT_X_H_A, &buffer[1]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_OUT_Y_L_A, &buffer[2]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_OUT_Y_H_A, &buffer[3]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_OUT_Z_L_A, &buffer[4]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_OUT_Z_H_A, &buffer[5]);
   
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+
   /* Check in the control register4 the data alignment*/
   if(!(ctrlx[0] & LSM303DLHC_BLE_MSB)) 
   {
@@ -282,16 +400,23 @@ void LSM303DLHC_AccReadXYZ(float* pfData)
 void LSM303DLHC_AccFilterClickCmd(uint8_t HighPassFilterClickState)
 {
   uint8_t tmpreg = 0x00;
+  static uint8_t ret;
   
   /* Read CTRL_REG2 register */
-  tmpreg = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, &tmpreg);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   tmpreg &= ~(LSM303DLHC_HPF_CLICK_ENABLE);
-  
   tmpreg |= HighPassFilterClickState;
   
   /* Write value to ACC MEMS CTRL_REG2 regsister */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, tmpreg);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG2_A, &tmpreg, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -310,15 +435,23 @@ void LSM303DLHC_AccFilterClickCmd(uint8_t HighPassFilterClickState)
 void LSM303DLHC_AccIT1Enable(uint8_t LSM303DLHC_IT)
 {
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read CTRL_REG3 register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG3_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG3_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Enable IT1 */
   tmpval |= LSM303DLHC_IT;
   
   /* Write value to MEMS CTRL_REG3 register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG3_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG3_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -337,15 +470,23 @@ void LSM303DLHC_AccIT1Enable(uint8_t LSM303DLHC_IT)
 void LSM303DLHC_AccIT1Disable(uint8_t LSM303DLHC_IT)
 {
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read CTRL_REG3 register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG3_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG3_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Disable IT1 */
   tmpval &= ~LSM303DLHC_IT;
   
   /* Write value to MEMS CTRL_REG3 register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG3_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG3_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -363,15 +504,23 @@ void LSM303DLHC_AccIT1Disable(uint8_t LSM303DLHC_IT)
 void LSM303DLHC_AccIT2Enable(uint8_t LSM303DLHC_IT)
 {
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read CTRL_REG3 register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG6_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG6_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Enable IT2 */
   tmpval |= LSM303DLHC_IT;
   
   /* Write value to MEMS CTRL_REG3 register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG6_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG6_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -389,15 +538,24 @@ void LSM303DLHC_AccIT2Enable(uint8_t LSM303DLHC_IT)
 void LSM303DLHC_AccIT2Disable(uint8_t LSM303DLHC_IT)
 {
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read CTRL_REG3 register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG6_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG6_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
   
   /* Disable IT2 */
   tmpval &= ~LSM303DLHC_IT;
   
   /* Write value to MEMS CTRL_REG3 register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG6_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CTRL_REG6_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -409,15 +567,23 @@ void LSM303DLHC_AccIT2Disable(uint8_t LSM303DLHC_IT)
 void LSM303DLHC_AccINT1InterruptEnable(uint8_t ITCombination, uint8_t ITAxes)
 {  
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read INT1_CFR register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_INT1_CFG_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_INT1_CFG_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Enable the selected interrupt */
   tmpval |= (ITAxes | ITCombination);
   
   /* Write value to MEMS INT1_CFR register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_INT1_CFG_A, tmpval);  
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_INT1_CFG_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -429,15 +595,23 @@ void LSM303DLHC_AccINT1InterruptEnable(uint8_t ITCombination, uint8_t ITAxes)
 void LSM303DLHC_AccINT1InterruptDisable(uint8_t ITCombination, uint8_t ITAxes)
 {  
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read INT1_CFR register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_INT1_CFG_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_INT1_CFG_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Disable the selected interrupt */
   tmpval &= ~(ITAxes | ITCombination);
   
   /* Write value to MEMS INT1_CFR register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_INT1_CFG_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_INT1_CFG_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -449,15 +623,23 @@ void LSM303DLHC_AccINT1InterruptDisable(uint8_t ITCombination, uint8_t ITAxes)
 void LSM303DLHC_AccINT2InterruptEnable(uint8_t ITCombination, uint8_t ITAxes)
 {  
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read INT2_CFR register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_INT2_CFG_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_INT2_CFG_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Enable the selected interrupt */
   tmpval |= (ITAxes | ITCombination);
   
   /* Write value to MEMS INT2_CFR register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_INT2_CFG_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_INT2_CFG_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -469,15 +651,24 @@ void LSM303DLHC_AccINT2InterruptEnable(uint8_t ITCombination, uint8_t ITAxes)
 void LSM303DLHC_AccINT2InterruptDisable(uint8_t ITCombination, uint8_t ITAxes)
 {  
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read INT2_CFR register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_INT2_CFG_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_INT2_CFG_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Disable the selected interrupt */
   tmpval &= ~(ITAxes | ITCombination);
   
   /* Write value to MEMS INT2_CFR register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_INT2_CFG_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_INT2_CFG_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
 }
 
 /**
@@ -488,30 +679,54 @@ void LSM303DLHC_AccINT2InterruptDisable(uint8_t ITCombination, uint8_t ITAxes)
 void LSM303DLHC_AccClickITEnable(uint8_t ITClick)
 {  
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read CLICK_CFR register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CLICK_CFG_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CLICK_CFG_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Enable the selected interrupt */
   tmpval |= ITClick;
   
   /* Write value to MEMS CLICK CFG register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CLICK_CFG_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CLICK_CFG_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Configure Click Threshold on Z axis */
   tmpval = 0x0A;
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CLICK_THS_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CLICK_THS_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Configure Time Limit */
   tmpval = 0x05;
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_TIME_LIMIT_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_TIME_LIMIT_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Configure Latency */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_TIME_LATENCY_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_TIME_LATENCY_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Configure Click Window */
   tmpval = 0x32;
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_TIME_WINDOW_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_TIME_WINDOW_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -522,15 +737,23 @@ void LSM303DLHC_AccClickITEnable(uint8_t ITClick)
 void LSM303DLHC_AccClickITDisable(uint8_t ITClick)
 {  
   uint8_t tmpval = 0x00;
+  static uint8_t ret;
   
   /* Read CLICK_CFR register */
-  tmpval = COMPASSACCELERO_IO_Read(ACC_I2C_ADDRESS, LSM303DLHC_CLICK_CFG_A);
+  ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CLICK_CFG_A, &tmpval);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
   
   /* Disable the selected interrupt */
   tmpval &= ~ITClick;
   
   /* Write value to MEMS CLICK_CFR register */
-  COMPASSACCELERO_IO_Write(ACC_I2C_ADDRESS, LSM303DLHC_CLICK_CFG_A, tmpval);
+  ret = I2Cx_WriteData(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_CLICK_CFG_A, &tmpval, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
 }
 
 /**
@@ -540,9 +763,7 @@ void LSM303DLHC_AccClickITDisable(uint8_t ITClick)
   */
 void LSM303DLHC_AccZClickITConfig(void)
 {  
-  /* Configure low level IT config */
-  COMPASSACCELERO_IO_ITConfig();
-  
+ 
   /* Select click IT as INT1 interrupt */
   LSM303DLHC_AccIT1Enable(LSM303DLHC_IT1_CLICK);
   
@@ -553,52 +774,153 @@ void LSM303DLHC_AccZClickITConfig(void)
   LSM303DLHC_AccClickITEnable(LSM303DLHC_Z_SINGLE_CLICK);
 }
 
-#ifdef MAGNET
+
+
+void MAGNET_Init(void)
+{
+  LACCELERO_InitTypeDef LSM303DLHC_MAG_InitStruct;
+  
+  /* Configure MEMS magnetometer main parameters: temp, working mode, full Scale and Data rate */
+  LSM303DLHC_MAG_InitStruct.Temperature_Sensor = LSM303DLHC_TEMPSENSOR_ENABLE;
+  LSM303DLHC_MAG_InitStruct.MagOutput_DataRate =LSM303DLHC_ODR_30_HZ ;
+  LSM303DLHC_MAG_InitStruct.MagFull_Scale = LSM303DLHC_FS_8_1_GA;
+  LSM303DLHC_MAG_InitStruct.Working_Mode = LSM303DLHC_CONTINUOS_CONVERSION;
+  LSM303DLHC_MagInit(&LSM303DLHC_MAG_InitStruct);
+}
+
+void LSM303DLHC_MagInit(LACCELERO_InitTypeDef *LSM303DLHC_InitStruct)
+{  
+  uint8_t cra_regm = 0x00, crb_regm = 0x00, mr_regm = 0x00;
+  static uint8_t ret;
+  
+  /* Configure the low level interface ---------------------------------------*/
+  //LSM303DLHC_LowLevel_Init();
+  
+  /* Configure MEMS: temp and Data rate */
+  cra_regm |= (uint8_t) (LSM303DLHC_InitStruct->Temperature_Sensor | LSM303DLHC_InitStruct->MagOutput_DataRate);
+    
+  /* Configure MEMS: full Scale */
+  crb_regm |= (uint8_t) (LSM303DLHC_InitStruct->MagFull_Scale);
+      
+  /* Configure MEMS: working mode */
+  mr_regm |= (uint8_t) (LSM303DLHC_InitStruct->Working_Mode);
+                    
+  /* Write value to Mag MEMS CRA_REG regsister */
+  ret = I2Cx_WriteData(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_CRA_REG_M, &cra_regm, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+  /* Write value to Mag MEMS CRB_REG regsister */
+  ret = I2Cx_WriteData(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_CRB_REG_M, &crb_regm, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+
+  /* Write value to Mag MEMS MR_REG regsister */
+  ret = I2Cx_WriteData(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_MR_REG_M, &mr_regm, 1);
+  
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+}
+
 /**
-  * @brief  Set LSM303DLHC Mag Initialization.
-  * @param  LSM303DLHC_InitStruct: pointer to a LSM303DLHC_MagInitTypeDef structure 
-  *         that contains the configuration setting for the LSM303DLHC.
+  * @brief  calculate the magnetic field Magn.
+* @param  pfData: pointer to the data out
   * @retval None
   */
-//void LSM303DLHC_MagInit(LSM303DLHCMag_InitTypeDef *LSM303DLHC_InitStruct)
-//{  
-//  uint8_t cra_regm = 0x00, crb_regm = 0x00, mr_regm = 0x00;
-//  
-//  /* Configure MEMS: temp and Data rate */
-//  cra_regm |= (uint8_t) (LSM303DLHC_InitStruct->Temperature_Sensor | LSM303DLHC_InitStruct->MagOutput_DataRate);
-//  
-//  /* Configure MEMS: full Scale */
-//  crb_regm |= (uint8_t) (LSM303DLHC_InitStruct->MagFull_Scale);
-//  
-//  /* Configure MEMS: working mode */
-//  mr_regm |= (uint8_t) (LSM303DLHC_InitStruct->Working_Mode);
-//  
-//  /* Write value to Mag MEMS CRA_REG register */
-//  COMPASSACCELERO_IO_Write(MAG_I2C_ADDRESS, LSM303DLHC_CRA_REG_M, 1, &cra_regm);
-//  
-//  /* Write value to Mag MEMS CRB_REG register */
-//  COMPASSACCELERO_IO_Write(MAG_I2C_ADDRESS, LSM303DLHC_CRB_REG_M, 1, &crb_regm);
-//  
-//  /* Write value to Mag MEMS MR_REG register */
-//  COMPASSACCELERO_IO_Write(MAG_I2C_ADDRESS, LSM303DLHC_MR_REG_M, 1, &mr_regm);
-//}
-
-/**
-  * @brief  Get status for Mag LSM303DLHC data
-  * @param  None
-  * @retval Data status in a LSM303DLHC Data register
-  */
-uint8_t LSM303DLHC_MagGetDataStatus(void)
+void LSM303DLHC_MagReadXYZ (float* pfData)
 {
-  uint8_t tmpreg;
-  
-  /* Read Mag STATUS register */
-  COMPASSACCELERO_IO_Read(MAG_I2C_ADDRESS, LSM303DLHC_SR_REG_M, 1, &tmpreg);
-  
-  return tmpreg;
-}
-#endif /* MAGNET */
+  static uint8_t buffer[6] = {0};
+  uint8_t CTRLB = 0;
+  uint16_t Magn_Sensitivity_XY = 0, Magn_Sensitivity_Z = 0;
+  uint8_t i =0;
+  static uint8_t ret;
 
+    ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_CRB_REG_M, &CTRLB);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+  /* Read output register X, Y & Z magnetic value */
+  ret = I2Cx_ReadMultipleBytes(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_OUT_M, buffer, 6);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_OUT_X_L_M, &buffer[0]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_OUT_X_H_M, &buffer[1]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_OUT_Y_L_M, &buffer[2]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_OUT_Y_H_M, &buffer[3]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_OUT_Z_L_M, &buffer[4]);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_OUT_Z_H_M, &buffer[5]);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+  /* Switch the sensitivity set in the CRTLB*/
+  switch(CTRLB & 0xE0)
+  {
+  case LSM303DLHC_FS_1_3_GA:
+    Magn_Sensitivity_XY = LSM303DLHC_M_SENSITIVITY_XY_1_3Ga;
+    Magn_Sensitivity_Z = LSM303DLHC_M_SENSITIVITY_Z_1_3Ga;
+    break;
+  case LSM303DLHC_FS_1_9_GA:
+    Magn_Sensitivity_XY = LSM303DLHC_M_SENSITIVITY_XY_1_9Ga;
+    Magn_Sensitivity_Z = LSM303DLHC_M_SENSITIVITY_Z_1_9Ga;
+    break;
+  case LSM303DLHC_FS_2_5_GA:
+    Magn_Sensitivity_XY = LSM303DLHC_M_SENSITIVITY_XY_2_5Ga;
+    Magn_Sensitivity_Z = LSM303DLHC_M_SENSITIVITY_Z_2_5Ga;
+    break;
+  case LSM303DLHC_FS_4_0_GA:
+    Magn_Sensitivity_XY = LSM303DLHC_M_SENSITIVITY_XY_4Ga;
+    Magn_Sensitivity_Z = LSM303DLHC_M_SENSITIVITY_Z_4Ga;
+    break;
+  case LSM303DLHC_FS_4_7_GA:
+    Magn_Sensitivity_XY = LSM303DLHC_M_SENSITIVITY_XY_4_7Ga;
+    Magn_Sensitivity_Z = LSM303DLHC_M_SENSITIVITY_Z_4_7Ga;
+    break;
+  case LSM303DLHC_FS_5_6_GA:
+    Magn_Sensitivity_XY = LSM303DLHC_M_SENSITIVITY_XY_5_6Ga;
+    Magn_Sensitivity_Z = LSM303DLHC_M_SENSITIVITY_Z_5_6Ga;
+    break;
+  case LSM303DLHC_FS_8_1_GA:
+    Magn_Sensitivity_XY = LSM303DLHC_M_SENSITIVITY_XY_8_1Ga;
+    Magn_Sensitivity_Z = LSM303DLHC_M_SENSITIVITY_Z_8_1Ga;
+    break;
+  }
+  
+  for(i=0; i<2; i++)
+  {
+    pfData[i]=(float)((int16_t)(((uint16_t)buffer[2*i+1] << 8) + buffer[2*i]))/Magn_Sensitivity_XY*1000;
+  }
+  pfData[2]=(float)((int16_t)(((uint16_t)buffer[5] << 8) + buffer[4]))/Magn_Sensitivity_Z*1000;
+  
+  
+}
+
+void LSM303DLHC_MagReadTemp (float* pfData)
+{
+  //static int16_t tempC;
+  static int16_t rawTemp;
+  static uint8_t buffer[2] = {0};
+  static uint8_t ret;
+  
+  ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_TEMP_OUT_L_M, &buffer[0]);
+  ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_TEMP_OUT_H_M, &buffer[1]);
+  if ( ret != HAL_OK ) {
+    __asm("NOP");
+  }
+  
+
+  rawTemp=(((uint16_t)buffer[1] << 8) + buffer[0]);
+  
+  //rawTemp = (((buffer[1] << 8) + buffer[0]) >> 4); //temperature raw
+  //tempC = rawTemp / 8 / 8 + 25; //temperature in celsuis + offset
+  
+  pfData[0] = rawTemp / 8.0 / 8.0;
+  //pData[0] = (int16_t)((buffer[1] << 4) + (buffer[0] >> 4));
+}
 /**
   * @}
   */ 

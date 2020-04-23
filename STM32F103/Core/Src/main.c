@@ -30,6 +30,7 @@
 #include "pid.h"
 #include "i2c_handler.h"
 #include "lsm303dlhc.h"
+#include "l3gd20.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -129,7 +130,10 @@ static float referenceRR = 50;
 
 static PID_t controller;
 
-static volatile uint8_t whoamireg = 0;
+static float accelerometerBuffer[3];
+static float compassBuffer[3];
+static float gyroBuffer[3];
+static float gyroTemp[1];
 
 /* USER CODE END PV */
 
@@ -655,6 +659,109 @@ void saturateFloat(float* i, float min, float max) {
   else if (val > max) val = max;
   *i = val;
 }
+
+static bool wait_for_gpio_state_timeout(GPIO_TypeDef *port, uint16_t pin, GPIO_PinState state, uint32_t timeout)
+ {
+    uint32_t Tickstart = HAL_GetTick();
+    bool ret = true;
+    /* Wait until flag is set */
+    for(;(state != HAL_GPIO_ReadPin(port, pin)) && (true == ret);)
+    {
+        /* Check for the timeout */
+        if (timeout != HAL_MAX_DELAY)
+        {
+            if ((timeout == 0U) || ((HAL_GetTick() - Tickstart) > timeout))
+            {
+                ret = false;
+            }
+            else
+            {
+            }
+        }
+        asm("nop");
+    }
+    return ret;
+}
+
+
+static void I2C_ClearBusyFlagErratum(I2C_HandleTypeDef* handle, uint32_t timeout)
+{
+    GPIO_InitTypeDef GPIO_InitStructure;
+
+    // 1. Clear PE bit.
+    CLEAR_BIT(handle->Instance->CR1, I2C_CR1_PE);
+
+    //  2. Configure the SCL and SDA I/Os as General Purpose Output Open-Drain, High level (Write 1 to GPIOx_ODR).
+    HAL_I2C_DeInit(handle);
+
+    GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_OD;
+    GPIO_InitStructure.Pull = GPIO_NOPULL;
+
+    GPIO_InitStructure.Pin = IMU_SCL_Pin;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+    GPIO_InitStructure.Pin = IMU_SDA_Pin;
+    HAL_GPIO_Init(IMU_SDA_GPIO_Port, &GPIO_InitStructure);
+
+    // 3. Check SCL and SDA High level in GPIOx_IDR.
+    HAL_GPIO_WritePin(IMU_SCL_GPIO_Port, IMU_SDA_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(IMU_SDA_GPIO_Port, IMU_SCL_Pin, GPIO_PIN_SET);
+
+    wait_for_gpio_state_timeout(IMU_SCL_GPIO_Port, IMU_SCL_Pin, GPIO_PIN_SET, timeout);
+    wait_for_gpio_state_timeout(IMU_SDA_GPIO_Port, IMU_SDA_Pin, GPIO_PIN_SET, timeout);
+
+    // 4. Configure the SDA I/O as General Purpose Output Open-Drain, Low level (Write 0 to GPIOx_ODR).
+    HAL_GPIO_WritePin(IMU_SDA_GPIO_Port, IMU_SDA_Pin, GPIO_PIN_RESET);
+
+    // 5. Check SDA Low level in GPIOx_IDR.
+    wait_for_gpio_state_timeout(IMU_SDA_GPIO_Port, IMU_SDA_Pin, GPIO_PIN_RESET, timeout);
+
+    // 6. Configure the SCL I/O as General Purpose Output Open-Drain, Low level (Write 0 to GPIOx_ODR).
+    HAL_GPIO_WritePin(IMU_SCL_GPIO_Port, IMU_SCL_Pin, GPIO_PIN_RESET);
+
+    // 7. Check SCL Low level in GPIOx_IDR.
+    wait_for_gpio_state_timeout(IMU_SCL_GPIO_Port, IMU_SCL_Pin, GPIO_PIN_RESET, timeout);
+
+    // 8. Configure the SCL I/O as General Purpose Output Open-Drain, High level (Write 1 to GPIOx_ODR).
+    HAL_GPIO_WritePin(IMU_SCL_GPIO_Port, IMU_SCL_Pin, GPIO_PIN_SET);
+
+    // 9. Check SCL High level in GPIOx_IDR.
+    wait_for_gpio_state_timeout(IMU_SCL_GPIO_Port, IMU_SCL_Pin, GPIO_PIN_SET, timeout);
+
+    // 10. Configure the SDA I/O as General Purpose Output Open-Drain , High level (Write 1 to GPIOx_ODR).
+    HAL_GPIO_WritePin(IMU_SDA_GPIO_Port, IMU_SDA_Pin, GPIO_PIN_SET);
+
+    // 11. Check SDA High level in GPIOx_IDR.
+    wait_for_gpio_state_timeout(IMU_SDA_GPIO_Port, IMU_SDA_Pin, GPIO_PIN_SET, timeout);
+
+    // 12. Configure the SCL and SDA I/Os as Alternate function Open-Drain.
+    GPIO_InitStructure.Mode = GPIO_MODE_AF_OD;
+    //GPIO_InitStructure.Alternate = GPIO_AF1_I2C1;
+
+    GPIO_InitStructure.Pin = IMU_SCL_Pin;
+    HAL_GPIO_Init(IMU_SCL_GPIO_Port, &GPIO_InitStructure);
+
+    GPIO_InitStructure.Pin = IMU_SDA_Pin;
+    HAL_GPIO_Init(IMU_SDA_GPIO_Port, &GPIO_InitStructure);
+
+    // 13. Set SWRST bit in I2Cx_CR1 register.
+    SET_BIT(handle->Instance->CR1, I2C_CR1_SWRST);
+    asm("nop");
+
+    /* 14. Clear SWRST bit in I2Cx_CR1 register. */
+    CLEAR_BIT(handle->Instance->CR1, I2C_CR1_SWRST);
+    asm("nop");
+
+    /* 15. Enable the I2C peripheral by setting the PE bit in I2Cx_CR1 register */
+    SET_BIT(handle->Instance->CR1, I2C_CR1_PE);
+    asm("nop");
+
+    // Call initialization function.
+    HAL_I2C_Init(handle);
+    //MX_I2C1_Init();
+}
+
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -945,38 +1052,28 @@ void StartServoTask(void const * argument)
 void StartSensorTask(void const * argument)
 {
   /* USER CODE BEGIN StartSensorTask */
-  uint8_t a;
   //whoamireg = I2Cx_ReadData(&hi2c1, 0x19, LSM303DLHC_WHO_AM_I_ADDR);
-  uint8_t ret;
-  uint8_t buf[12];
-  buf[0] = 0x0F;
 
-  //ret = HAL_I2C_Master_Receive(&hi2c1, 0x32, buf, 1, I2Cx_TIMEOUT_MAX);
-  //ret = HAL_I2C_Master_Transmit(&hi2c1, 0x32, buf, 1, I2Cx_TIMEOUT_MAX);
+  //osDelay(2000);
+  //ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_WHO_AM_I_ADDR, buf);
   //if ( ret != HAL_OK ) {
   //  __asm("NOP");
   //}
-  //else {
-
-    // Read 2 bytes from the temperature register
-    //ret = HAL_I2C_Master_Receive(&hi2c1, 0x32, buf, 1, I2Cx_TIMEOUT_MAX);
-    //if ( ret != HAL_OK ) {
-    //  __asm("NOP");
-    //}
+  
+  ACCELERO_Init();
+  MAGNET_Init();
+  GYRO_Init();
     
-  //}
-  
-  osDelay(2000);
-  ret = HAL_I2C_Master_Receive(&hi2c1, 0x32, buf, 1, I2Cx_TIMEOUT_MAX);
-  a = I2Cx_ReadData(&hi2c1, 0x32, 0x0F);
-  if ( ret != HAL_OK ) {
-    __asm("NOP");
-  }
-  
   /* Infinite loop */
   for(;;)
   {
-    a = I2Cx_ReadData(&hi2c1, 0x32, 0x0F);
+    
+    LSM303DLHC_AccReadXYZ(accelerometerBuffer);
+    LSM303DLHC_MagReadXYZ(compassBuffer);
+    L3GD20_ReadXYZAngRate(gyroBuffer);
+    L3GD20_ReadTemp(gyroTemp);
+    
+    
     osDelay(100);
     
   }

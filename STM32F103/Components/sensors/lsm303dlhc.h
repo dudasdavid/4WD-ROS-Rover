@@ -83,6 +83,7 @@
 #define LSM303DLHC_CTRL_REG6_A               0x25  /* Control register 6 acceleration */
 #define LSM303DLHC_REFERENCE_A               0x26  /* Reference register acceleration */
 #define LSM303DLHC_STATUS_REG_A              0x27  /* Status register acceleration */
+#define LSM303DLHC_OUT_A                     0xA8  /* Output Register for batch acceleration read */
 #define LSM303DLHC_OUT_X_L_A                 0x28  /* Output Register X acceleration */
 #define LSM303DLHC_OUT_X_H_A                 0x29  /* Output Register X acceleration */
 #define LSM303DLHC_OUT_Y_L_A                 0x2A  /* Output Register Y acceleration */
@@ -114,6 +115,7 @@
 #define LSM303DLHC_CRA_REG_M                 0x00  /* Control register A magnetic field */
 #define LSM303DLHC_CRB_REG_M                 0x01  /* Control register B magnetic field */
 #define LSM303DLHC_MR_REG_M                  0x02  /* Control register MR magnetic field */
+#define LSM303DLHC_OUT_M                     0x83  /* Output Register for batch magnetic read */
 #define LSM303DLHC_OUT_X_H_M                 0x03  /* Output Register X magnetic field */
 #define LSM303DLHC_OUT_X_L_M                 0x04  /* Output Register X magnetic field */
 #define LSM303DLHC_OUT_Z_H_M                 0x05  /* Output Register Z magnetic field */
@@ -444,6 +446,9 @@
   * @{
   */
 /* ACC functions */
+void ACCELERO_Init(void);
+void MAGNET_Init(void);
+
 void    LSM303DLHC_AccInit(uint16_t InitStruct);
 uint8_t LSM303DLHC_AccReadID(void);
 void    LSM303DLHC_AccRebootCmd(void);
@@ -463,18 +468,13 @@ void    LSM303DLHC_AccClickITEnable(uint8_t ITClick);
 void    LSM303DLHC_AccClickITDisable(uint8_t ITClick);
 void    LSM303DLHC_AccZClickITConfig(void);
 
-#if 0
-/* MAG functions */
-void    LSM303DLHC_MagInit(LSM303DLHCMag_InitTypeDef *LSM303DLHC_InitStruct);
-uint8_t LSM303DLHC_MagGetDataStatus(void);
-void    LSM303DLHC_CompassReadAcc(int16_t* pData);
-#endif
 
-/* COMPASS / ACCELERO IO functions */
-void    COMPASSACCELERO_IO_Init(void);
-void    COMPASSACCELERO_IO_ITConfig(void);
-void    COMPASSACCELERO_IO_Write(uint16_t DeviceAddr, uint8_t RegisterAddr, uint8_t Value);
-uint8_t COMPASSACCELERO_IO_Read(uint16_t DeviceAddr, uint8_t RegisterAddr);
+/* MAG functions */
+void LSM303DLHC_MagInit(LACCELERO_InitTypeDef *LSM303DLHC_InitStruct);
+void LSM303DLHC_MagReadXYZ (float* pfData);
+void LSM303DLHC_MagReadTemp (float* pfData);
+
+
 
 /* ACC driver structure */
 extern ACCELERO_DrvTypeDef Lsm303dlhcDrv;

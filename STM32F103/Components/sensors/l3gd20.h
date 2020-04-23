@@ -62,7 +62,8 @@
 /** @defgroup L3GD20_Exported_Constants
   * @{
   */
-
+    
+#define L3GD20_I2C_ADDRESS                      0xD6
 /******************************************************************************/
 /*************************** START REGISTER MAPPING  **************************/
 /******************************************************************************/
@@ -75,6 +76,7 @@
 #define L3GD20_REFERENCE_REG_ADDR     0x25  /* Reference register */
 #define L3GD20_OUT_TEMP_ADDR          0x26  /* Out temp register */
 #define L3GD20_STATUS_REG_ADDR        0x27  /* Status register */
+#define L3GD20_OUT_ADDR               0xA8  /* Output Register for batch gyro read */
 #define L3GD20_OUT_X_L_ADDR           0x28  /* Output Register X */
 #define L3GD20_OUT_X_H_ADDR           0x29  /* Output Register X */
 #define L3GD20_OUT_Y_L_ADDR           0x2A  /* Output Register Y */
@@ -274,6 +276,8 @@
   * @{
   */
 /* Sensor Configuration Functions */ 
+void GYRO_Init(void);
+   
 void    L3GD20_Init(uint16_t InitStruct);
 uint8_t L3GD20_ReadID(void);
 void    L3GD20_RebootCmd(void);
@@ -288,12 +292,8 @@ void    L3GD20_FilterConfig(uint8_t FilterStruct);
 void    L3GD20_FilterCmd(uint8_t HighPassFilterState);
 void    L3GD20_ReadXYZAngRate(float *pfData);
 uint8_t L3GD20_GetDataStatus(void);
+void L3GD20_ReadTemp(float *pfData);
 
-/* Gyroscope IO functions */
-void    GYRO_IO_Init(void);
-void    GYRO_IO_DeInit(void);
-void    GYRO_IO_Write(uint8_t *pBuffer, uint8_t WriteAddr, uint16_t NumByteToWrite);
-void    GYRO_IO_Read(uint8_t *pBuffer, uint8_t ReadAddr, uint16_t NumByteToRead);
 
 /* Gyroscope driver structure */
 extern GYRO_DrvTypeDef L3gd20Drv;

@@ -1190,18 +1190,6 @@
         <group>
             <name>Components</name>
             <group>
-                <name>BSP</name>
-                <file>
-                    <name>$PROJ_DIR$\..\Components\bsp\stm32f411e_discovery.c</name>
-                </file>
-                <file>
-                    <name>$PROJ_DIR$\..\Components\bsp\stm32f411e_discovery_accelerometer.c</name>
-                </file>
-                <file>
-                    <name>$PROJ_DIR$\..\Components\bsp\stm32f411e_discovery_gyroscope.c</name>
-                </file>
-            </group>
-            <group>
                 <name>i2c_handler</name>
                 <file>
                     <name>$PROJ_DIR$\..\Components\i2c_handler\i2c_handler.c</name>
