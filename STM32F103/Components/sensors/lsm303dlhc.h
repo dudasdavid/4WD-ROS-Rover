@@ -44,7 +44,7 @@
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "accelero.h"
+#include <stdint.h>
 
 /** @addtogroup BSP
   * @{
@@ -445,6 +445,66 @@
 /** @defgroup LSM303DLHC_Exported_Functions
   * @{
   */
+
+
+
+
+/* ACC driver structure */
+typedef struct
+{  
+  void      (*Init)(uint16_t);
+  uint8_t   (*ReadID)(void);
+  void      (*Reset)(void);
+  void      (*ConfigIT)(void);
+  void      (*EnableIT)(uint8_t);
+  void      (*DisableIT)(uint8_t);
+  uint8_t   (*ITStatus)(uint16_t);
+  void      (*ClearIT)(void);
+  void      (*FilterConfig)(uint8_t);
+  void      (*FilterCmd)(uint8_t);
+  void      (*GetXYZ)(float *);
+}ACCELERO_DrvTypeDef;
+
+
+/* ACCELERO struct */
+typedef struct
+{
+  uint8_t Power_Mode;                         /* Power-down/Normal Mode */
+  uint8_t AccOutput_DataRate;                 /* OUT data rate */
+  uint8_t Axes_Enable;                        /* Axes enable */
+  uint8_t High_Resolution;                    /* High Resolution enabling/disabling */
+  uint8_t BlockData_Update;                   /* Block Data Update */
+  uint8_t Endianness;                         /* Endian Data selection */
+  uint8_t AccFull_Scale;                      /* Full Scale selection */
+}ACCELERO_InitTypeDef;
+
+/* ACCELERO High Pass Filter struct */
+typedef struct
+{
+  uint8_t HighPassFilter_Mode_Selection;      /* Internal filter mode */
+  uint8_t HighPassFilter_CutOff_Frequency;    /* High pass filter cut-off frequency */
+  uint8_t HighPassFilter_AOI1;                /* HPF_enabling/disabling for AOI function on interrupt 1 */
+  uint8_t HighPassFilter_AOI2;                /* HPF_enabling/disabling for AOI function on interrupt 2 */
+}ACCELERO_FilterConfigTypeDef;
+
+/* ACCELERO Mag struct */
+typedef struct
+{
+  uint8_t Temperature_Sensor;                /* Temperature sensor enable/disable */
+  uint8_t MagOutput_DataRate;                /* OUT data rate */
+  uint8_t Working_Mode;                      /* operating mode */
+  uint8_t MagFull_Scale;                     /* Full Scale selection */
+}LACCELERO_InitTypeDef;
+
+
+typedef enum 
+{
+  ACCELERO_OK = 0,
+  ACCELERO_ERROR = 1,
+  ACCELERO_TIMEOUT = 2
+}ACCELERO_StatusTypeDef;
+
+
 /* ACC functions */
 void ACCELERO_Init(void);
 void MAGNET_Init(void);
@@ -473,12 +533,6 @@ void    LSM303DLHC_AccZClickITConfig(void);
 void LSM303DLHC_MagInit(LACCELERO_InitTypeDef *LSM303DLHC_InitStruct);
 void LSM303DLHC_MagReadXYZ (float* pfData);
 void LSM303DLHC_MagReadTemp (float* pfData);
-
-
-
-/* ACC driver structure */
-extern ACCELERO_DrvTypeDef Lsm303dlhcDrv;
-
 /**
   * @}
   */
