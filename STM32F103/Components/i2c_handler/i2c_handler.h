@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "stm32f1xx_hal.h"
 
-#define I2Cx_TIMEOUT_MAX                        0x0A00
+#define I2Cx_TIMEOUT_MAX                        100
 
 #define DISCOVERY_I2Cx_FORCE_RESET()            __HAL_RCC_I2C1_FORCE_RESET()
 #define DISCOVERY_I2Cx_RELEASE_RESET()          __HAL_RCC_I2C1_RELEASE_RESET()
