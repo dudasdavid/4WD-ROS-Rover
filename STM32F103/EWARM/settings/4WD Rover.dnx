@@ -20,7 +20,7 @@
         <stlinkResetStrategy>2</stlinkResetStrategy>
     </StLinkDriver>
     <DebugChecksum>
-        <Checksum>3189570740</Checksum>
+        <Checksum>870690975</Checksum>
     </DebugChecksum>
     <Exceptions>
         <StopOnUncaught>_ 0</StopOnUncaught>
@@ -55,7 +55,8 @@
         <ITMlogFile>$PROJ_DIR$\ITM.log</ITMlogFile>
     </SWOTraceHWSettings>
     <struct_types>
-        <Fmt0>I2C_TypeDef-CR1	3	0</Fmt0>
+        <Fmt0>GPIO_TypeDef-ODR	4	0</Fmt0>
+        <Fmt1>I2C_TypeDef-CR1	4	0</Fmt1>
     </struct_types>
     <Trace2>
         <Enabled>0</Enabled>

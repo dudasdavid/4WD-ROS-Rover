@@ -1196,6 +1196,12 @@
                 </file>
             </group>
             <group>
+                <name>OrientationEstimator</name>
+                <file>
+                    <name>$PROJ_DIR$\..\Components\orientation_estimator\IMUOrientationEstimator.c</name>
+                </file>
+            </group>
+            <group>
                 <name>PID</name>
                 <file>
                     <name>$PROJ_DIR$\..\Components\pid\functions.c</name>

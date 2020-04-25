@@ -363,7 +363,7 @@
                     <state>$PROJ_DIR$/../Drivers/CMSIS/Include</state>
                     <state>$PROJ_DIR$/../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS</state>
                     <state>$PROJ_DIR$/../Components/pid</state>
-                    <state>$PROJ_DIR$/../Components/bsp</state>
+                    <state>$PROJ_DIR$/../Components/orientation_estimator</state>
                     <state>$PROJ_DIR$/../Components/sensors</state>
                     <state>$PROJ_DIR$/../Components/i2c_handler</state>
                 </option>
@@ -1060,6 +1060,12 @@
                 <name>i2c_handler</name>
                 <file>
                     <name>$PROJ_DIR$\..\Components\i2c_handler\i2c_handler.c</name>
+                </file>
+            </group>
+            <group>
+                <name>OrientationEstimator</name>
+                <file>
+                    <name>$PROJ_DIR$\..\Components\orientation_estimator\IMUOrientationEstimator.c</name>
                 </file>
             </group>
             <group>
