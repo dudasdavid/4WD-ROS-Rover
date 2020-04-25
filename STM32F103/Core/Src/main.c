@@ -31,6 +31,7 @@
 #include "i2c_handler.h"
 #include "lsm303dlhc.h"
 #include "l3gd20.h"
+#include "IMUOrientationEstimator.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,7 +42,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define ABS(x)         (x < 0) ? (-x) : x
-#define PI     3.14159f
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -89,11 +90,11 @@ static volatile float RL_max = 15.5;
 static volatile float RR_max = 15.5;
 static volatile float ST_max = 9.4;
                  
-static volatile float FL_val = 50;
-static volatile float FR_val = 50;
-static volatile float RL_val = 50;
-static volatile float RR_val = 50;
-static volatile float ST_val = 50;
+static float FL_val = 50;
+static float FR_val = 50;
+static float RL_val = 50;
+static float RR_val = 50;
+static float ST_val = 50;
 
 static uint32_t motCntr = 0; //Motor encoder
 static uint32_t motCntrPrev = 0;
@@ -135,6 +136,14 @@ static float compassBuffer[3];
 static float gyroBuffer[3];
 static float gyroTemp[1];
 
+static Vector3D_t accelerometer;
+static Vector3D_t gyro;
+static Vector3D_t magnetometer;
+
+static Orientation3D_t IMUorientation;
+static Orientation3D_t IMUorientationDeg;
+static Quaternion_t quaternion;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -153,6 +162,7 @@ void StartSensorTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 extern uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
+static void I2C_ClearBusyFlagErratum(I2C_HandleTypeDef* handle, uint32_t timeout);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -207,6 +217,7 @@ int main(void)
   TIM1->CCR1 = 0*3600/100; //DC motor +
   TIM1->CCR2 = 0*3600/100; //DC motor -
   
+  //I2C_ClearBusyFlagErratum(&hi2c1, HAL_MAX_DELAY);
 
   //__HAL_RCC_I2C1_FORCE_RESET();
   //HAL_Delay(2);
@@ -610,6 +621,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(EXTI5_ENC_GPIO_Port, &GPIO_InitStruct);
 
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+
 }
 
 /* USER CODE BEGIN 4 */
@@ -663,24 +678,19 @@ void saturateFloat(float* i, float min, float max) {
 static bool wait_for_gpio_state_timeout(GPIO_TypeDef *port, uint16_t pin, GPIO_PinState state, uint32_t timeout)
  {
     uint32_t Tickstart = HAL_GetTick();
-    bool ret = true;
     /* Wait until flag is set */
-    for(;(state != HAL_GPIO_ReadPin(port, pin)) && (true == ret);)
+    while (state != HAL_GPIO_ReadPin(port, pin))
     {
         /* Check for the timeout */
         if (timeout != HAL_MAX_DELAY)
         {
             if ((timeout == 0U) || ((HAL_GetTick() - Tickstart) > timeout))
             {
-                ret = false;
-            }
-            else
-            {
+                return false;
             }
         }
-        asm("nop");
     }
-    return ret;
+    return true;
 }
 
 
@@ -743,14 +753,6 @@ static void I2C_ClearBusyFlagErratum(I2C_HandleTypeDef* handle, uint32_t timeout
 
     GPIO_InitStructure.Pin = IMU_SDA_Pin;
     HAL_GPIO_Init(IMU_SDA_GPIO_Port, &GPIO_InitStructure);
-
-    // 13. Set SWRST bit in I2Cx_CR1 register.
-    SET_BIT(handle->Instance->CR1, I2C_CR1_SWRST);
-    asm("nop");
-
-    /* 14. Clear SWRST bit in I2Cx_CR1 register. */
-    CLEAR_BIT(handle->Instance->CR1, I2C_CR1_SWRST);
-    asm("nop");
 
     /* 15. Enable the I2C peripheral by setting the PE bit in I2Cx_CR1 register */
     SET_BIT(handle->Instance->CR1, I2C_CR1_PE);
@@ -1009,6 +1011,17 @@ void StartServoTask(void const * argument)
     
     if (automaticSuspension == 1) {
       __asm("NOP");
+      FL_val = FR_val = RL_val = RR_val = 50;
+      FL_val += IMUorientationDeg.pitch * 6;
+      FR_val += IMUorientationDeg.pitch * 6;
+      RL_val -= IMUorientationDeg.pitch * 6;
+      RR_val -= IMUorientationDeg.pitch * 6;
+      
+      FL_val -= IMUorientationDeg.roll * 6;
+      FR_val += IMUorientationDeg.roll * 6;
+      RL_val -= IMUorientationDeg.roll * 6;
+      RR_val += IMUorientationDeg.roll * 6;
+      
     }
     else {
       if (fixedDistance == 1) {
@@ -1022,6 +1035,10 @@ void StartServoTask(void const * argument)
       }
     }
     
+    saturateFloat(&FL_val, 0, 100);
+    saturateFloat(&FR_val, 0, 100);
+    saturateFloat(&RL_val, 0, 100);
+    saturateFloat(&RR_val, 0, 100);
     
     TIM2->CCR1 = (int)((RL_val / (100 / (RL_max - RL_min)) + RL_min) * 36000) / 100; //Servo RL
     TIM2->CCR2 = (int)(((100 - RR_val) / (100 / (RR_max - RR_min)) + RR_min) * 36000) / 100; //Servo RR
@@ -1073,8 +1090,33 @@ void StartSensorTask(void const * argument)
     L3GD20_ReadXYZAngRate(gyroBuffer);
     L3GD20_ReadTemp(gyroTemp);
     
+    accelerometer = (Vector3D_t) {
+        .x = accelerometerBuffer[0],
+        .y = accelerometerBuffer[1],
+        .z = accelerometerBuffer[2]
+    };
     
-    osDelay(100);
+    gyro = (Vector3D_t) {
+        .x = gyroBuffer[0],
+        .y = gyroBuffer[1],
+        .z = gyroBuffer[2]
+    };
+    
+    magnetometer = (Vector3D_t) {
+        .x = compassBuffer[0],
+        .y = compassBuffer[1],
+        .z = compassBuffer[2]
+    };
+    
+    IMUOrientationEstimator_Run_OnUpdate(0.02, &accelerometer, &gyro, &magnetometer, &IMUorientation, &quaternion);
+    
+    IMUorientationDeg = (Orientation3D_t) {
+        .pitch = rad_to_deg(IMUorientation.pitch),
+        .roll  = rad_to_deg(IMUorientation.roll),
+        .yaw   = rad_to_deg(IMUorientation.yaw)
+    };
+    
+    osDelay(20);
     
   }
   /* USER CODE END StartSensorTask */

@@ -90,6 +90,7 @@ void Error_Handler(void);
 #define ENA_SERVO_GPIO_Port GPIOA
 #define EXTI5_ENC_Pin GPIO_PIN_5
 #define EXTI5_ENC_GPIO_Port GPIOB
+#define EXTI5_ENC_EXTI_IRQn EXTI9_5_IRQn
 #define IMU_SCL_Pin GPIO_PIN_6
 #define IMU_SCL_GPIO_Port GPIOB
 #define IMU_SDA_Pin GPIO_PIN_7
