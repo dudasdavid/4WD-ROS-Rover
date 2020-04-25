@@ -74,7 +74,7 @@ static volatile float referenceSpeed = 0;
 static float referenceSpeedRaw = 50;
 static float referenceAngle = 50;
 static float referenceDistance = 50;
-volatile uint8_t servoEna = 0;
+volatile uint8_t servoEna = 1;
 char txBuf[30];
 char rxBuf[64];
 uint8_t receiveState = 0;
@@ -96,6 +96,27 @@ static float FR_val = 50;
 static float RL_val = 50;
 static float RR_val = 50;
 static float ST_val = 50;
+
+static float FL_valPrev = 50;
+static float FR_valPrev = 50;
+static float RL_valPrev = 50;
+static float RR_valPrev = 50;
+static float suspensionThreshold = 1.8;
+static float rollGain = 6.f;
+static float pitchGain = 6.f;
+static float filteredPitch;
+static float filteredRoll;
+
+static PID_t pitchController;
+static PID_t rollController;
+
+static float rollOffset;
+static float pitchOffset;
+
+
+static volatile float ctrlPSusp = 1;
+static volatile float ctrlISusp = 0.1;
+static volatile float ctrlDSusp = 0;
 
 static uint32_t motCntr = 0; //Motor encoder
 static uint32_t motCntrPrev = 0;
@@ -694,7 +715,19 @@ bool is_close_to(const Vector3D_t vector, const Vector3D_t reference, float thre
             && fabsf(vector.z - reference.z) <= threshold;
 }
 
-static void restart_averaging(void)
+void debounceServo(float *newVal, float *oldVal, float th) {
+  float val;
+  if (fabs(*newVal - *oldVal) > th){
+    val = *newVal;
+    *oldVal = val;
+  }
+  else{
+    val = *oldVal;
+    *newVal = val;
+  }
+}
+
+void restart_averaging(void)
 {
     /* start a new calibration immediately */
     averageAngularSpeedSamples = 0u;
@@ -1031,6 +1064,22 @@ void StartServoTask(void const * argument)
   TIM3->CCR1 = (int)(((100 - ST_val) / (100 / (ST_max - ST_min)) + ST_min) * 36000) / 100; //Steering
   osDelay(100);
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET); //SERVO DISABLED
+  
+  pid_initialize(&rollController); 
+  rollController.config.P          = ctrlPSusp;
+  rollController.config.I          = ctrlISusp;
+  rollController.config.D          = 0.f;
+  rollController.config.LowerLimit = 0.f;
+  rollController.config.UpperLimit = 100.f;
+  
+  pid_initialize(&pitchController); 
+  pitchController.config.P          = ctrlPSusp;
+  pitchController.config.I          = ctrlISusp;
+  pitchController.config.D          = 0.f;
+  pitchController.config.LowerLimit = 0.f;
+  pitchController.config.UpperLimit = 100.f;
+  
+
   /* Infinite loop */
   for(;;)
   {
@@ -1040,15 +1089,29 @@ void StartServoTask(void const * argument)
     if (automaticSuspension == 1) {
       __asm("NOP");
       FL_val = FR_val = RL_val = RR_val = 50;
-      FL_val += IMUorientationDeg.pitch * 6;
-      FR_val += IMUorientationDeg.pitch * 6;
-      RL_val -= IMUorientationDeg.pitch * 6;
-      RR_val -= IMUorientationDeg.pitch * 6;
       
-      FL_val -= IMUorientationDeg.roll * 6;
-      FR_val += IMUorientationDeg.roll * 6;
-      RL_val -= IMUorientationDeg.roll * 6;
-      RR_val += IMUorientationDeg.roll * 6;
+      filteredPitch = filter2(filteredPitch, IMUorientationDeg.pitch, 0.1);
+      filteredRoll = filter2(filteredRoll, IMUorientationDeg.roll, 0.1);
+      
+      rollOffset = pid_update(&rollController, 0, IMUorientationDeg.roll);
+      pitchOffset = pid_update(&rollController, 0, IMUorientationDeg.roll);
+      
+      FL_val += filteredPitch * pitchGain;
+      FR_val += filteredPitch * pitchGain;
+      RL_val -= filteredPitch * pitchGain;
+      RR_val -= filteredPitch * pitchGain;
+      
+      FL_val -= filteredRoll * rollGain;
+      FR_val += filteredRoll * rollGain;
+      RL_val -= filteredRoll * rollGain;
+      RR_val += filteredRoll * rollGain;
+      
+      
+      
+      debounceServo(&FL_val, &FL_valPrev, suspensionThreshold);
+      debounceServo(&FR_val, &FR_valPrev, suspensionThreshold);
+      debounceServo(&RL_val, &RL_valPrev, suspensionThreshold);
+      debounceServo(&RR_val, &RR_valPrev, suspensionThreshold);
       
     }
     else {
