@@ -42,7 +42,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define ABS(x)         (x < 0) ? (-x) : x
-
+#define IDLE_NUM_SAMPLES        ((uint32_t) 200u)
+#define AVERAGE_NUM_SAMPLES     ((uint32_t) 50u)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -137,12 +138,23 @@ static float gyroBuffer[3];
 static float gyroTemp[1];
 
 static Vector3D_t accelerometer;
-static Vector3D_t gyro;
+static Vector3D_t angularSpeed;
+static Vector3D_t angularSpeedCompensated;
 static Vector3D_t magnetometer;
 
 static Orientation3D_t IMUorientation;
 static Orientation3D_t IMUorientationDeg;
 static Quaternion_t quaternion;
+static uint8_t isMoving;
+static uint8_t offset_calibrated;
+static Vector3D_t averageAngularSpeed;
+static Vector3D_t sumAngularSpeed;
+static uint32_t averageAngularSpeedSamples;
+static Vector3D_t currentMidValue;
+static uint32_t samplesInCurrentBand;
+
+static float IDLE_SENSITIVITY = 5.f;
+
 
 /* USER CODE END PV */
 
@@ -675,7 +687,23 @@ void saturateFloat(float* i, float min, float max) {
   *i = val;
 }
 
-static bool wait_for_gpio_state_timeout(GPIO_TypeDef *port, uint16_t pin, GPIO_PinState state, uint32_t timeout)
+bool is_close_to(const Vector3D_t vector, const Vector3D_t reference, float threshold)
+{
+    return fabsf(vector.x - reference.x) <= threshold
+            && fabsf(vector.y - reference.y) <= threshold
+            && fabsf(vector.z - reference.z) <= threshold;
+}
+
+static void restart_averaging(void)
+{
+    /* start a new calibration immediately */
+    averageAngularSpeedSamples = 0u;
+
+    /* only reset sum, average will be used for compensation */
+    sumAngularSpeed = (Vector3D_t) {0.0f, 0.0f, 0.0f};
+}
+
+bool wait_for_gpio_state_timeout(GPIO_TypeDef *port, uint16_t pin, GPIO_PinState state, uint32_t timeout)
  {
     uint32_t Tickstart = HAL_GetTick();
     /* Wait until flag is set */
@@ -694,7 +722,7 @@ static bool wait_for_gpio_state_timeout(GPIO_TypeDef *port, uint16_t pin, GPIO_P
 }
 
 
-static void I2C_ClearBusyFlagErratum(I2C_HandleTypeDef* handle, uint32_t timeout)
+void I2C_ClearBusyFlagErratum(I2C_HandleTypeDef* handle, uint32_t timeout)
 {
     GPIO_InitTypeDef GPIO_InitStructure;
 
@@ -1069,13 +1097,9 @@ void StartServoTask(void const * argument)
 void StartSensorTask(void const * argument)
 {
   /* USER CODE BEGIN StartSensorTask */
-  //whoamireg = I2Cx_ReadData(&hi2c1, 0x19, LSM303DLHC_WHO_AM_I_ADDR);
 
-  //osDelay(2000);
-  //ret = I2Cx_ReadSingleByte(&hi2c1, ACC_I2C_ADDRESS, LSM303DLHC_WHO_AM_I_ADDR, buf);
-  //if ( ret != HAL_OK ) {
-  //  __asm("NOP");
-  //}
+  
+  
   
   ACCELERO_Init();
   MAGNET_Init();
@@ -1096,7 +1120,7 @@ void StartSensorTask(void const * argument)
         .z = accelerometerBuffer[2]
     };
     
-    gyro = (Vector3D_t) {
+    angularSpeed = (Vector3D_t) {
         .x = gyroBuffer[0],
         .y = gyroBuffer[1],
         .z = gyroBuffer[2]
@@ -1108,13 +1132,61 @@ void StartSensorTask(void const * argument)
         .z = compassBuffer[2]
     };
     
-    IMUOrientationEstimator_Run_OnUpdate(0.02, &accelerometer, &gyro, &magnetometer, &IMUorientation, &quaternion);
+    
+    if (is_close_to(angularSpeed, currentMidValue, IDLE_SENSITIVITY)) {
+        if (samplesInCurrentBand < IDLE_NUM_SAMPLES) {
+            samplesInCurrentBand++;
+            if (samplesInCurrentBand == IDLE_NUM_SAMPLES) {
+                isMoving = 0;
+            }
+        }
+    }
+    else {
+        samplesInCurrentBand = 0u;
+        currentMidValue = angularSpeed;
+        isMoving = 1;
+    }
+    
+    if (isMoving) {
+        restart_averaging();
+    }
+    else {
+      if (averageAngularSpeedSamples < AVERAGE_NUM_SAMPLES) {
+        sumAngularSpeed.x += angularSpeed.x;
+        sumAngularSpeed.y += angularSpeed.y;
+        sumAngularSpeed.z += angularSpeed.z;
+
+        ++averageAngularSpeedSamples;
+
+        if (averageAngularSpeedSamples == AVERAGE_NUM_SAMPLES) {
+            averageAngularSpeed.x = sumAngularSpeed.x / AVERAGE_NUM_SAMPLES;
+            averageAngularSpeed.y = sumAngularSpeed.y / AVERAGE_NUM_SAMPLES;
+            averageAngularSpeed.z = sumAngularSpeed.z / AVERAGE_NUM_SAMPLES;
+
+            offset_calibrated = 1;
+
+            restart_averaging();
+        }
+      }
+    }
+
+    if (offset_calibrated)
+    {
+      angularSpeedCompensated = (Vector3D_t) {
+          .x = angularSpeed.x - averageAngularSpeed.x,
+          .y = angularSpeed.y - averageAngularSpeed.y,
+          .z = angularSpeed.z - averageAngularSpeed.z
+      };
+    }
+    
+    IMUOrientationEstimator(0.02, &accelerometer, &angularSpeedCompensated, &magnetometer, &IMUorientation, &quaternion);
     
     IMUorientationDeg = (Orientation3D_t) {
         .pitch = rad_to_deg(IMUorientation.pitch),
         .roll  = rad_to_deg(IMUorientation.roll),
         .yaw   = rad_to_deg(IMUorientation.yaw)
     };
+        
     
     osDelay(20);
     
