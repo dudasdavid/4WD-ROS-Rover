@@ -39,7 +39,7 @@
 #include "lsm303dlhc.h"
 #include "i2c_handler.h"
 
-ACCELERO_DrvTypeDef Lsm303dlhcDrv =
+static const ACCELERO_DrvTypeDef Lsm303dlhcDrv =
 {
   LSM303DLHC_AccInit,
   LSM303DLHC_AccReadID,
@@ -60,8 +60,6 @@ uint8_t tmpregcfgA = 0x00;
 
 extern I2C_HandleTypeDef hi2c1;
 
-static ACCELERO_DrvTypeDef *AccelerometerDrv;
-
 void ACCELERO_Init(void)
 {
   uint16_t ctrl = 0x0000;
@@ -71,7 +69,6 @@ void ACCELERO_Init(void)
   if(Lsm303dlhcDrv.ReadID() == I_AM_LMS303DLHC)
   {
     /* Initialize the Accelerometer driver structure */
-    AccelerometerDrv = &Lsm303dlhcDrv;
 
     /* MEMS configuration ----------------------------------------------------*/
     /* Fill the Accelerometer structure */
@@ -91,7 +88,7 @@ void ACCELERO_Init(void)
                       LSM303DLHC_InitStructure.AccFull_Scale | LSM303DLHC_InitStructure.High_Resolution) << 8);
     
     /* Configure the Accelerometer main parameters */
-    AccelerometerDrv->Init(ctrl);
+    Lsm303dlhcDrv.Init(ctrl);
     
     /* Fill the Accelerometer LPF structure */
     LSM303DLHC_FilterStructure.HighPassFilter_Mode_Selection =LSM303DLHC_HPM_NORMAL_MODE;
@@ -106,7 +103,7 @@ void ACCELERO_Init(void)
                       LSM303DLHC_FilterStructure.HighPassFilter_AOI2);
 
     /* Configure the Accelerometer LPF main parameters */
-    AccelerometerDrv->FilterConfig(ctrl);
+    Lsm303dlhcDrv.FilterConfig(ctrl);
 
   }
 }
@@ -114,9 +111,9 @@ void ACCELERO_Init(void)
 
 void ACCELERO_Reset(void)
 {
-  if(AccelerometerDrv->Reset != NULL)
+  if(Lsm303dlhcDrv.Reset != NULL)
   {
-    AccelerometerDrv->Reset();
+    Lsm303dlhcDrv.Reset();
   }  
 }
 
@@ -125,9 +122,9 @@ void ACCELERO_Reset(void)
   */
 void ACCELERO_Click_ITConfig(void)
 {
-  if(AccelerometerDrv->ConfigIT!= NULL)
+  if(Lsm303dlhcDrv.ConfigIT!= NULL)
   {
-    AccelerometerDrv->ConfigIT();
+    Lsm303dlhcDrv.ConfigIT();
   }
 }
 
@@ -140,9 +137,9 @@ void ACCELERO_GetXYZ(float *pfDataXYZ)
 {
   //float SwitchXY = 0;
   
-  if(AccelerometerDrv->GetXYZ!= NULL)
+  if(Lsm303dlhcDrv.GetXYZ!= NULL)
   {
-    AccelerometerDrv->GetXYZ(pfDataXYZ);
+    Lsm303dlhcDrv.GetXYZ(pfDataXYZ);
     
     /* Switch X and Y Axes in case of LSM303DLHC MEMS */
     //if(AccelerometerDrv == &Lsm303dlhcDrv)
@@ -783,7 +780,7 @@ void MAGNET_Init(void)
   /* Configure MEMS magnetometer main parameters: temp, working mode, full Scale and Data rate */
   LSM303DLHC_MAG_InitStruct.Temperature_Sensor = LSM303DLHC_TEMPSENSOR_ENABLE;
   LSM303DLHC_MAG_InitStruct.MagOutput_DataRate =LSM303DLHC_ODR_30_HZ ;
-  LSM303DLHC_MAG_InitStruct.MagFull_Scale = LSM303DLHC_FS_8_1_GA;
+  LSM303DLHC_MAG_InitStruct.MagFull_Scale = LSM303DLHC_FS_4_0_GA;
   LSM303DLHC_MAG_InitStruct.Working_Mode = LSM303DLHC_CONTINUOS_CONVERSION;
   LSM303DLHC_MagInit(&LSM303DLHC_MAG_InitStruct);
 }
@@ -791,7 +788,7 @@ void MAGNET_Init(void)
 void LSM303DLHC_MagInit(LACCELERO_InitTypeDef *LSM303DLHC_InitStruct)
 {  
   uint8_t cra_regm = 0x00, crb_regm = 0x00, mr_regm = 0x00;
-  static uint8_t ret;
+  uint8_t ret;
   
   /* Configure the low level interface ---------------------------------------*/
   //LSM303DLHC_LowLevel_Init();
@@ -834,11 +831,11 @@ void LSM303DLHC_MagInit(LACCELERO_InitTypeDef *LSM303DLHC_InitStruct)
   */
 void LSM303DLHC_MagReadXYZ (float* pfData)
 {
-  static uint8_t buffer[6] = {0};
+  uint8_t buffer[6] = {0};
   uint8_t CTRLB = 0;
-  uint16_t Magn_Sensitivity_XY = 0, Magn_Sensitivity_Z = 0;
+  float Magn_Sensitivity_XY = 0, Magn_Sensitivity_Z = 0;
   uint8_t i =0;
-  static uint8_t ret;
+  uint8_t ret;
 
     ret = I2Cx_ReadSingleByte(&hi2c1, MAG_I2C_ADDRESS, LSM303DLHC_CRB_REG_M, &CTRLB);
   if ( ret != HAL_OK ) {
@@ -890,12 +887,10 @@ void LSM303DLHC_MagReadXYZ (float* pfData)
     break;
   }
   
-  for(i=0; i<2; i++)
-  {
-    pfData[i]=(float)((int16_t)(((uint16_t)buffer[2*i+1] << 8) + buffer[2*i]))/Magn_Sensitivity_XY*1000;
-  }
-  pfData[2]=(float)((int16_t)(((uint16_t)buffer[5] << 8) + buffer[4]))/Magn_Sensitivity_Z*1000;
-  
+  // X, Z, Y is the output order, thanks ST
+  pfData[0]=((int16_t)(((uint16_t)buffer[0] << 8) + buffer[1]))/Magn_Sensitivity_XY;
+  pfData[2]=((int16_t)(((uint16_t)buffer[2] << 8) + buffer[3]))/Magn_Sensitivity_Z;
+  pfData[1]=((int16_t)(((uint16_t)buffer[4] << 8) + buffer[5]))/Magn_Sensitivity_XY;
   
 }
 
