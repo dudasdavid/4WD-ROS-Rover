@@ -31,7 +31,7 @@ typedef struct {
 
 #endif /* COMPONENT_TYPES_IMU_ORIENTATION_ESTIMATOR_H_ */
 
-void IMUOrientationEstimator_Run_OnUpdate(float sampleTime, const Vector3D_t* inAcc, const Vector3D_t* inGyro, const Vector3D_t* inMag, Orientation3D_t* outEuler, Quaternion_t* outQuat);
+void IMUOrientationEstimator(float sampleTime, const Vector3D_t* inAcc, const Vector3D_t* inGyro, const Vector3D_t* inMag, Orientation3D_t* outEuler, Quaternion_t* outQuat);
 float deg_to_rad(float angle);
 float rad_to_deg(float rad);
 #endif /* COMPONENT_IMU_ORIENTATION_ESTIMATOR_H_ */

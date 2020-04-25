@@ -101,7 +101,7 @@ static Quaternion_t madgwick_imu(const float sampleTime, const Vector3D_t accele
     };
 }
 
-void IMUOrientationEstimator_Run_OnUpdate(float sampleTime, const Vector3D_t* inAcc, const Vector3D_t* inGyro, const Vector3D_t* inMag, Orientation3D_t* outEuler, Quaternion_t* outQuat)
+void IMUOrientationEstimator(float sampleTime, const Vector3D_t* inAcc, const Vector3D_t* inGyro, const Vector3D_t* inMag, Orientation3D_t* outEuler, Quaternion_t* outQuat)
 {
     Vector3D_t angularSpeedRad = {
         .x = deg_to_rad(inGyro->x),
