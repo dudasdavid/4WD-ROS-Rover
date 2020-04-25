@@ -101,11 +101,13 @@ static float FL_valPrev = 50;
 static float FR_valPrev = 50;
 static float RL_valPrev = 50;
 static float RR_valPrev = 50;
-static float suspensionThreshold = 1.8;
+static float suspensionThreshold = 2;
 static float rollGain = 6.f;
 static float pitchGain = 6.f;
 static float filteredPitch;
 static float filteredRoll;
+static float rollReference = 0;
+static float pitchReference = 0;
 
 static PID_t pitchController;
 static PID_t rollController;
@@ -114,8 +116,8 @@ static float rollOffset;
 static float pitchOffset;
 
 
-static volatile float ctrlPSusp = 1;
-static volatile float ctrlISusp = 0.1;
+static volatile float ctrlPSusp = 2.5;
+static volatile float ctrlISusp = 0.2;
 static volatile float ctrlDSusp = 0;
 
 static uint32_t motCntr = 0; //Motor encoder
@@ -174,7 +176,7 @@ static uint32_t averageAngularSpeedSamples;
 static Vector3D_t currentMidValue;
 static uint32_t samplesInCurrentBand;
 
-static float IDLE_SENSITIVITY = 5.f;
+static float IDLE_SENSITIVITY = 30.f;
 
 
 /* USER CODE END PV */
@@ -277,7 +279,7 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityIdle, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* definition and creation of motorCtrlTask */
@@ -1069,15 +1071,15 @@ void StartServoTask(void const * argument)
   rollController.config.P          = ctrlPSusp;
   rollController.config.I          = ctrlISusp;
   rollController.config.D          = 0.f;
-  rollController.config.LowerLimit = 0.f;
-  rollController.config.UpperLimit = 100.f;
+  rollController.config.LowerLimit = -50.f;
+  rollController.config.UpperLimit = 50.f;
   
   pid_initialize(&pitchController); 
   pitchController.config.P          = ctrlPSusp;
   pitchController.config.I          = ctrlISusp;
   pitchController.config.D          = 0.f;
-  pitchController.config.LowerLimit = 0.f;
-  pitchController.config.UpperLimit = 100.f;
+  pitchController.config.LowerLimit = -50.f;
+  pitchController.config.UpperLimit = 50.f;
   
 
   /* Infinite loop */
@@ -1093,25 +1095,27 @@ void StartServoTask(void const * argument)
       filteredPitch = filter2(filteredPitch, IMUorientationDeg.pitch, 0.1);
       filteredRoll = filter2(filteredRoll, IMUorientationDeg.roll, 0.1);
       
-      rollOffset = pid_update(&rollController, 0, IMUorientationDeg.roll);
-      pitchOffset = pid_update(&rollController, 0, IMUorientationDeg.roll);
+      if (isMoving) {
+        rollOffset = pid_update(&rollController, rollReference, IMUorientationDeg.roll);
+        pitchOffset = pid_update(&pitchController, pitchReference, IMUorientationDeg.pitch);
+      }
       
-      FL_val += filteredPitch * pitchGain;
-      FR_val += filteredPitch * pitchGain;
-      RL_val -= filteredPitch * pitchGain;
-      RR_val -= filteredPitch * pitchGain;
+      FL_val -= pitchOffset;
+      FR_val -= pitchOffset;
+      RL_val += pitchOffset;
+      RR_val += pitchOffset;
       
-      FL_val -= filteredRoll * rollGain;
-      FR_val += filteredRoll * rollGain;
-      RL_val -= filteredRoll * rollGain;
-      RR_val += filteredRoll * rollGain;
+      FL_val += rollOffset;
+      FR_val -= rollOffset;
+      RL_val += rollOffset;
+      RR_val -= rollOffset;
       
       
       
-      debounceServo(&FL_val, &FL_valPrev, suspensionThreshold);
-      debounceServo(&FR_val, &FR_valPrev, suspensionThreshold);
-      debounceServo(&RL_val, &RL_valPrev, suspensionThreshold);
-      debounceServo(&RR_val, &RR_valPrev, suspensionThreshold);
+      //debounceServo(&FL_val, &FL_valPrev, suspensionThreshold);
+      //debounceServo(&FR_val, &FR_valPrev, suspensionThreshold);
+      //debounceServo(&RL_val, &RL_valPrev, suspensionThreshold);
+      //debounceServo(&RR_val, &RR_valPrev, suspensionThreshold);
       
     }
     else {
@@ -1125,6 +1129,7 @@ void StartServoTask(void const * argument)
         RR_val = referenceRR;
       }
     }
+    
     
     saturateFloat(&FL_val, 0, 100);
     saturateFloat(&FR_val, 0, 100);
@@ -1201,6 +1206,7 @@ void StartSensorTask(void const * argument)
             samplesInCurrentBand++;
             if (samplesInCurrentBand == IDLE_NUM_SAMPLES) {
                 isMoving = 0;
+                IDLE_SENSITIVITY = 6.f;
             }
         }
     }
@@ -1208,6 +1214,7 @@ void StartSensorTask(void const * argument)
         samplesInCurrentBand = 0u;
         currentMidValue = angularSpeed;
         isMoving = 1;
+        IDLE_SENSITIVITY = 30.f;
     }
     
     if (isMoving) {

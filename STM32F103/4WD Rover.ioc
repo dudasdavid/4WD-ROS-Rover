@@ -2,7 +2,7 @@
 FREERTOS.FootprintOK=true
 FREERTOS.HEAP_NUMBER=1
 FREERTOS.IPParameters=Tasks01,FootprintOK,HEAP_NUMBER,configTOTAL_HEAP_SIZE
-FREERTOS.Tasks01=defaultTask,0,128,StartDefaultTask,Default,NULL,Dynamic,NULL,NULL;motorCtrlTask,0,128,StartMotorControlTask,Default,NULL,Dynamic,NULL,NULL;commTask,0,128,StartCommTask,Default,NULL,Dynamic,NULL,NULL;servoTask,0,128,StartServoTask,Default,NULL,Dynamic,NULL,NULL;sensorTask,0,128,StartSensorTask,Default,NULL,Dynamic,NULL,NULL
+FREERTOS.Tasks01=defaultTask,-3,128,StartDefaultTask,Default,NULL,Dynamic,NULL,NULL;motorCtrlTask,0,128,StartMotorControlTask,Default,NULL,Dynamic,NULL,NULL;commTask,0,128,StartCommTask,Default,NULL,Dynamic,NULL,NULL;servoTask,0,128,StartServoTask,Default,NULL,Dynamic,NULL,NULL;sensorTask,0,128,StartSensorTask,Default,NULL,Dynamic,NULL,NULL
 FREERTOS.configTOTAL_HEAP_SIZE=8192
 File.Version=6
 GPIO.groupedBy=Group By Peripherals
