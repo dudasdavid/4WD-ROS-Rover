@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include <math.h>
 #include <stdbool.h>
+#include <inttypes.h>
 #include "pid.h"
 #include "i2c_handler.h"
 #include "lsm303dlhc.h"
@@ -75,7 +76,7 @@ static float referenceSpeedRaw = 50;
 static float referenceAngle = 50;
 static float referenceDistance = 50;
 volatile uint8_t servoEna = 1;
-char txBuf[30];
+char txBuf[64];
 char rxBuf[64];
 uint8_t receiveState = 0;
 
@@ -101,13 +102,15 @@ static float FL_valPrev = 50;
 static float FR_valPrev = 50;
 static float RL_valPrev = 50;
 static float RR_valPrev = 50;
-static float suspensionThreshold = 2;
-static float rollGain = 6.f;
-static float pitchGain = 6.f;
+static float ST_valPrev = 50;
+//static float suspensionThreshold = 2;
+//static float rollGain = 6.f;
+//static float pitchGain = 6.f;
 static float filteredPitch;
 static float filteredRoll;
 static float rollReference = 0;
 static float pitchReference = 0;
+static uint8_t servoDebounce = 0;
 
 static PID_t pitchController;
 static PID_t rollController;
@@ -135,7 +138,7 @@ static volatile float speedError = 0;
 static volatile float speedErrorPrev = 0;
 static volatile float speedIntError = 0;
 static volatile float speedDerivatedError = 0;
-static int16_t forceMotor = 0;
+//static int16_t forceMotor = 0;
 static volatile int16_t forceMotorBeforeSaturation = 0;
 static volatile uint16_t absForceMotor = 0;
 
@@ -168,7 +171,7 @@ static Vector3D_t magnetometer;
 static Orientation3D_t IMUorientation;
 static Orientation3D_t IMUorientationDeg;
 static Quaternion_t quaternion;
-static uint8_t isMoving;
+static uint8_t isMoving = 1;
 static uint8_t offset_calibrated;
 static Vector3D_t averageAngularSpeed;
 static Vector3D_t sumAngularSpeed;
@@ -176,7 +179,9 @@ static uint32_t averageAngularSpeedSamples;
 static Vector3D_t currentMidValue;
 static uint32_t samplesInCurrentBand;
 
-static float IDLE_SENSITIVITY = 30.f;
+static float sensitivityMoving2Still = 35.f;
+static float sensitivityStill2Moving = 7.f;
+static float IDLE_SENSITIVITY = 35.f;
 
 
 /* USER CODE END PV */
@@ -1024,6 +1029,21 @@ void StartCommTask(void const * argument)
         Len = SizeofCharArray((char*)txBuf);
         CDC_Transmit_FS((uint8_t*)txBuf, Len);
       }
+      else if ((rxBuf[0] == 'G') && (rxBuf[1] == 'C') && (rxBuf[2] == 'S') && (rxBuf[3] == '\r')){
+        sprintf(txBuf, "OK: %hu;%hu\r\n", GetCommOk(), GetCommError());
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'G') && (rxBuf[1] == 'Q') && (rxBuf[2] == 'T') && (rxBuf[3] == '\r')){
+        sprintf(txBuf, "OK: %.6f;%.6f;%.6f;%.6f\r\n", quaternion.q0, quaternion.q1, quaternion.q2, quaternion.q3);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
+      else if ((rxBuf[0] == 'G') && (rxBuf[1] == 'O') && (rxBuf[2] == 'R') && (rxBuf[3] == '\r')){
+        sprintf(txBuf, "OK: %.3f;%.3f;%.3f\r\n", IMUorientationDeg.pitch, IMUorientationDeg.roll, IMUorientationDeg.yaw);
+        Len = SizeofCharArray((char*)txBuf);
+        CDC_Transmit_FS((uint8_t*)txBuf, Len);
+      }
       
       else{
         sprintf(txBuf, "ERR: %s\r\n", rxBuf);
@@ -1043,7 +1063,7 @@ void StartCommTask(void const * argument)
       referenceSpeedRaw = 50;
       referenceAngle = 50;
     }
-    osDelay(10);
+    osDelay(5);
   }
   /* USER CODE END StartCommTask */
 }
@@ -1110,13 +1130,6 @@ void StartServoTask(void const * argument)
       RL_val += rollOffset;
       RR_val -= rollOffset;
       
-      
-      
-      //debounceServo(&FL_val, &FL_valPrev, suspensionThreshold);
-      //debounceServo(&FR_val, &FR_valPrev, suspensionThreshold);
-      //debounceServo(&RL_val, &RL_valPrev, suspensionThreshold);
-      //debounceServo(&RR_val, &RR_valPrev, suspensionThreshold);
-      
     }
     else {
       if (fixedDistance == 1) {
@@ -1130,11 +1143,33 @@ void StartServoTask(void const * argument)
       }
     }
     
+    //This workaround is needed because the SG90 servo in steering is a crap
+    if (ST_val != ST_valPrev || FL_val != FL_valPrev || FR_val != FR_valPrev || RL_val != RL_valPrev || RR_val != RR_valPrev){
+      servoDebounce = 0;
+    }
+    if (servoDebounce < 100) {
+      servoDebounce++;
+      servoEna = 1;
+    }
+    else {
+      servoEna = 0;
+    }
+    
+    ST_valPrev = ST_val;
+    FL_valPrev = FL_val;
+    FR_valPrev = FR_val;
+    RL_valPrev = RL_val;
+    RR_valPrev = RR_val;
+    
+    // End of workaround
+    
+    
     
     saturateFloat(&FL_val, 0, 100);
     saturateFloat(&FR_val, 0, 100);
     saturateFloat(&RL_val, 0, 100);
     saturateFloat(&RR_val, 0, 100);
+    saturateFloat(&ST_val, 0, 100);
     
     TIM2->CCR1 = (int)((RL_val / (100 / (RL_max - RL_min)) + RL_min) * 36000) / 100; //Servo RL
     TIM2->CCR2 = (int)(((100 - RR_val) / (100 / (RR_max - RR_min)) + RR_min) * 36000) / 100; //Servo RR
@@ -1149,6 +1184,7 @@ void StartServoTask(void const * argument)
     else {
       HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET); //SERVO DISABLED
     }
+
     
     osDelay(10);
   }
@@ -1167,7 +1203,7 @@ void StartSensorTask(void const * argument)
   /* USER CODE BEGIN StartSensorTask */
 
   
-  
+  osDelay(500);
   
   ACCELERO_Init();
   MAGNET_Init();
@@ -1206,7 +1242,7 @@ void StartSensorTask(void const * argument)
             samplesInCurrentBand++;
             if (samplesInCurrentBand == IDLE_NUM_SAMPLES) {
                 isMoving = 0;
-                IDLE_SENSITIVITY = 6.f;
+                IDLE_SENSITIVITY = sensitivityStill2Moving;
             }
         }
     }
@@ -1214,7 +1250,7 @@ void StartSensorTask(void const * argument)
         samplesInCurrentBand = 0u;
         currentMidValue = angularSpeed;
         isMoving = 1;
-        IDLE_SENSITIVITY = 30.f;
+        IDLE_SENSITIVITY = sensitivityMoving2Still;
     }
     
     if (isMoving) {
@@ -1246,6 +1282,13 @@ void StartSensorTask(void const * argument)
           .x = angularSpeed.x - averageAngularSpeed.x,
           .y = angularSpeed.y - averageAngularSpeed.y,
           .z = angularSpeed.z - averageAngularSpeed.z
+      };
+    }
+    else {
+      angularSpeedCompensated = (Vector3D_t) {
+          .x = angularSpeed.x,
+          .y = angularSpeed.y,
+          .z = angularSpeed.z
       };
     }
     

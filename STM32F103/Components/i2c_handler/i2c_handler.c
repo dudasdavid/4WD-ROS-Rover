@@ -56,3 +56,11 @@ HAL_StatusTypeDef I2Cx_WriteData(I2C_HandleTypeDef *hi2c, uint16_t Addr, uint8_t
   }
   return status;
 }
+
+uint16_t GetCommOk(void){
+  return i2cok;
+}
+
+uint16_t GetCommError(void){
+  return i2cerror;
+}

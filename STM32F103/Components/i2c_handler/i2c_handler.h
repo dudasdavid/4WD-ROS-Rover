@@ -24,3 +24,5 @@
 HAL_StatusTypeDef I2Cx_ReadSingleByte(I2C_HandleTypeDef *hi2c, uint16_t Addr, uint8_t Reg, uint8_t *value);
 HAL_StatusTypeDef I2Cx_ReadMultipleBytes(I2C_HandleTypeDef *hi2c, uint16_t Addr, uint8_t Reg, uint8_t *value, uint8_t len);
 HAL_StatusTypeDef I2Cx_WriteData(I2C_HandleTypeDef *hi2c, uint16_t Addr, uint8_t Reg, uint8_t *Value, uint8_t len);
+uint16_t GetCommOk(void);
+uint16_t GetCommError(void);
